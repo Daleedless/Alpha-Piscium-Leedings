@@ -139,4 +139,14 @@ uniform sampler2D usam_cumulusBase;
 uniform usampler1D usam_pbrLUT0;
 uniform sampler1D usam_f82;
 uniform sampler2D usam_specBRDFLUT;
+
+uniform usampler2D usam_restirReuseTex0;
+uniform usampler2D usam_restirReuseTex1;
+uniform usampler2D usam_restirReuseTex2;
+uniform usampler2D usam_restirReuseTex3;
+uniform usampler2D usam_restirReuseTex4;
+uniform usampler2D usam_restirReuseTex5;
+uniform usampler2D usam_restirReuseTex6;
+uniform usampler2D usam_restirReuseTex7;
+uniform usampler2D usam_restirReuseTex8;
 #endif

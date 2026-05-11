@@ -214,7 +214,13 @@ programs {
         pass("/pass/composite/GIReSTIRDuplicationMapDecorrelate.comp.glsl") {
             cond("defined(SETTING_GI_DECORRELATE)")
         }
-        pass("/pass/composite/GIReSTIRSpatialReuse.comp.glsl")
+        for (i in 0..7) {
+            pass("/pass/composite/GIReSTIRPairedSpatialReuse.comp.glsl") {
+                constDefine("PASS_INDEX", i.toString())
+                indirect(0, 48)
+            }
+        }
+        pass("/pass/composite/GIReSTIRPairedSpatialShade.comp.glsl")
         pass("/pass/composite/GIReSTIRSpatialReuseRaySort.comp.glsl")
         pass("/pass/composite/GIReSTIRSpatialReuseTrace.comp.glsl")
         pass("/pass/composite/GIDenoiserAccum.comp.glsl")

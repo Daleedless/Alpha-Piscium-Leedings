@@ -46,6 +46,8 @@
         "history_restir_prevSample": "RGBA16F",
         "history_restir_prevHitNormal": "RGB10_A2",
         "transient_restir_spatialInput": "RGBA32UI",
+        "transient_restir_spatialReservoirAccum": "RGBA32UI",
+        "transient_restir_pairwiseMISMetadata": "RGBA32UI",
         "transient_gi_diffuse_reprojInfo": "RGBA32UI",
         "transient_gi_hitDistanceFactors": "RGBA8",
         "transient_gi_denoiseVariance1": "RGBA8",
