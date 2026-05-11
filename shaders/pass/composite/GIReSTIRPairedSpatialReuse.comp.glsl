@@ -11,6 +11,26 @@ layout(local_size_x = 16, local_size_y = 16) in;
 
 layout(rgba32ui) uniform uimage2D uimg_rgba32ui;
 
+/*const*/
+#if PASS_INDEX == 0
+#define REUSETEX usam_restirReuseTex0
+#elif PASS_INDEX == 1
+#define REUSETEX usam_restirReuseTex1
+#elif PASS_INDEX == 2
+#define REUSETEX usam_restirReuseTex2
+#elif PASS_INDEX == 3
+#define REUSETEX usam_restirReuseTex3
+#elif PASS_INDEX == 4
+#define REUSETEX usam_restirReuseTex4
+#elif PASS_INDEX == 5
+#define REUSETEX usam_restirReuseTex5
+#elif PASS_INDEX == 6
+#define REUSETEX usam_restirReuseTex6
+#else
+#define REUSETEX usam_restirReuseTex7
+#endif
+/*const*/
+
 void evaluateShift(
     ivec2 texelDST, ivec2 texelSRC,
     inout ReSTIRReservoir accumResDST,
@@ -75,24 +95,7 @@ void main() {
     ivec2 localFetchPos = ivec2(gl_GlobalInvocationID.xy) % ivec2(256, 128);
     ivec2 tileId = ivec2(gl_GlobalInvocationID.xy) / ivec2(256, 128);
     ivec2 tileOrigin = tileId * ivec2(256, 256);
-    uvec4 pairData;
-#if PASS_INDEX == 0
-    pairData = texelFetch(usam_restirReuseTex0, localFetchPos, 0);
-#elif PASS_INDEX == 1
-    pairData = texelFetch(usam_restirReuseTex1, localFetchPos, 0);
-#elif PASS_INDEX == 2
-    pairData = texelFetch(usam_restirReuseTex2, localFetchPos, 0);
-#elif PASS_INDEX == 3
-    pairData = texelFetch(usam_restirReuseTex3, localFetchPos, 0);
-#elif PASS_INDEX == 4
-    pairData = texelFetch(usam_restirReuseTex4, localFetchPos, 0);
-#elif PASS_INDEX == 5
-    pairData = texelFetch(usam_restirReuseTex5, localFetchPos, 0);
-#elif PASS_INDEX == 6
-    pairData = texelFetch(usam_restirReuseTex6, localFetchPos, 0);
-#else
-    pairData = texelFetch(usam_restirReuseTex7, localFetchPos, 0);
-#endif
+    uvec4 pairData = texelFetch(REUSETEX, localFetchPos, 0);
     ivec2 localA = ivec2(pairData.xy);
     ivec2 localB = ivec2(pairData.zw);
     localA = (localA + global_restirSpatialTileOffset) % 256;
