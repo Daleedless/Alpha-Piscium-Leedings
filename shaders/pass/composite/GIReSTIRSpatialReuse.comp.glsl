@@ -244,7 +244,7 @@ void main() {
                             neighborReservoir.m,
                             neighborRand
                         )) {
-                            selectedSampleF = vec4(hitRadiance, neighborPHat);
+                            selectedSampleF = vec4(hitRadiance, neighborPHat * jacobian);
                         }
                     }
                 }
