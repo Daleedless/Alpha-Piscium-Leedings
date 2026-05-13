@@ -132,11 +132,11 @@ vec3 fresnel_dielectricConductor(float cosTheta, vec3 eta, vec3 etaK) {
 }
 
 // [LAG13]
-vec3 frenel_schlick(float cosTheta, vec3 f0) {
+vec3 fresnel_schlick(float cosTheta, vec3 f0) {
     return f0 + (1.0 - f0) * pow5(1.0 - cosTheta);
 }
 
-float frenel_schlick(float cosTheta, float f0) {
+float fresnel_schlick(float cosTheta, float f0) {
     return f0 + (1.0 - f0) * pow5(1.0 - cosTheta);
 }
 

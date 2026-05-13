@@ -9,7 +9,7 @@
 
 layout(local_size_x = 256) in;
 
-layout(rgba32ui) uniform uimage2D uimg_rgba32ui;
+layout(rgba32ui) uniform restrict uimage2D uimg_rgba32ui;
 
 /*const*/
 #if PASS_INDEX == 0
@@ -98,15 +98,17 @@ void main() {
     uvec4 pairData = texelFetch(REUSETEX, localFetchPos, 0);
     ivec2 localA = ivec2(pairData.xy);
     ivec2 localB = ivec2(pairData.zw);
-    localA = (localA + global_restirSpatialTileOffset);
-    localB = (localB + global_restirSpatialTileOffset);
+    ivec2 localD = localB - localA;
+    localD = ((localD + 128) & 255) - 128;
+    localB = localA + localD;
+    localA = (localA + uval_restirSpatialTileOffset);
+    localB = (localB + uval_restirSpatialTileOffset);
     ivec2 texelA = tileOrigin + localA;
     ivec2 texelB = tileOrigin + localB;
-    bool validA = all(lessThan(texelA, uval_mainImageSizeI)) && all(greaterThanEqual(texelA, ivec2(0)));
-    bool validB = all(lessThan(texelB, uval_mainImageSizeI)) && all(greaterThanEqual(texelB, ivec2(0)));
+    bool validA = all(lessThan(ivec4(texelA, -1, -1), ivec4(uval_mainImageSizeI, texelA)));
+    bool validB = all(lessThan(ivec4(texelB, -1, -1), ivec4(uval_mainImageSizeI, texelB)));
     if (!validA || !validB || texelA == texelB) return;
 
-    GBufferData gDataA, gDataB;
     Material matA, matB;
     SpatialSampleData sampleA, sampleB;
     vec3 viewPosA, viewPosB;
@@ -115,7 +117,7 @@ void main() {
     ReSTIRReservoir accumResA = restir_initReservoir();
     ReSTIRReservoir accumResB = restir_initReservoir();
     uvec4 metaA = uvec4(0), metaB = uvec4(0);
-    gDataA = gbufferData_init();
+    GBufferData gDataA = gbufferData_init();
     gbufferData1_unpack(texelFetch(usam_gbufferSolidData1, texelA, 0), gDataA);
     gbufferData2_unpack(texelFetch(usam_gbufferSolidData2, texelA, 0), gDataA);
     matA = material_decode(gDataA);
@@ -134,7 +136,7 @@ void main() {
     metaA = transient_restir_pairwiseMISMetadata_load(texelA);
     #endif
 
-    gDataB = gbufferData_init();
+    GBufferData gDataB = gbufferData_init();
     gbufferData1_unpack(texelFetch(usam_gbufferSolidData1, texelB, 0), gDataB);
     gbufferData2_unpack(texelFetch(usam_gbufferSolidData2, texelB, 0), gDataB);
     matB = material_decode(gDataB);

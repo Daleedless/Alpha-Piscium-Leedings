@@ -91,7 +91,7 @@ LightingResult directLighting(GBufferData gData, Material material, vec3 irradia
         // This fakes lights from sun disk + mie haze
         float sunMiePhase = phasefunc_KleinNishinaE(-LDotV, 2e4);
 
-        float sssFresnel = frenel_schlick(max(abs(LDotH), 0.005), 0.04);
+        float sssFresnel = fresnel_schlick(max(abs(LDotH), 0.005), 0.04);
         float phase = phasefunc_BiLambertianPlate(-LDotV, 0.3);
         result.sss = phase * sampleInSctrInt;
 

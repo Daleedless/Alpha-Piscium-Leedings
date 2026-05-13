@@ -22,6 +22,7 @@ layout(std430, binding = 6) buffer RayIndexData {
 layout(rgba16f) uniform image2D uimg_rgba16f;
 layout(rgb10_a2) uniform restrict writeonly image2D uimg_rgb10_a2;
 layout(r32f) uniform image2D uimg_r32f;
+layout(rgba8) uniform restrict writeonly image2D uimg_temp5;
 
 shared uint shared_rayCount[16];
 

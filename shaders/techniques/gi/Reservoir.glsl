@@ -105,17 +105,28 @@ uvec4 restir_reservoir_pack(ReSTIRReservoir reservoir) {
 
 // Evaluate combined diffuse + specular BRDF then calculate the target function (pHat)
 float evalTargetFunction(vec3 irradiance, vec3 normal, vec3 lightDir, vec3 viewDir, Material material) {
-    float NdotL = saturate(dot(normal, lightDir));
+    // Assumes rawNdotL is the un-clamped dot product. Ensure no pre-saturation occurred if passed from an external scope.
+    float rawNdotL = dot(normal, lightDir);
     float result = 0.0;
-    if (NdotL > 0.0) {
-        vec3 H = normalize(lightDir + viewDir);
-        float NdotV = saturate(dot(normal, viewDir));
-        float NdotH = saturate(dot(normal, H));
-        float LdotH = saturate(dot(lightDir, H));
 
-        float fresnel = fresnel_adobe(LdotH, material.f0, material.f82Tint);
-        float diffuseBRDF = material.dielectric * NdotL * RCP_PI;
-        float specularBRDF = bsdf_ggx(material, NdotL, NdotV, NdotH);
+    if (rawNdotL > 0.0) {
+        float rawNdotV = dot(normal, viewDir);
+        float LdotV    = dot(lightDir, viewDir);
+
+        // Compute inverse length of ||L+V||. The 1e-5 bias prevents rsqrt(0) NaN generation when L and V are perfectly opposed (LdotV = -1.0).
+        float invLen = inversesqrt(max(2.0 + 2.0 * LdotV, 1e-5));
+
+        // Pure scalar expansion. Replaces explicit vec3 H = normalize(...) and subsequent vector dot products.
+        float NdotV = saturate(rawNdotV);
+        float NdotH = saturate((rawNdotL + rawNdotV) * invLen);
+
+        // LdotH is mathematically bounded to [0, 1] (max angle between L and V is 180 deg, bounding half-angle to 90 deg). saturate() omitted.
+        float LdotH = (1.0 + LdotV) * invLen;
+
+        // Standard BRDF evaluation.
+        float fresnel = fresnel_schlick(LdotH, material.f0);
+        float diffuseBRDF = material.dielectric * rawNdotL * RCP_PI;
+        float specularBRDF = bsdf_ggx(material, rawNdotL, NdotV, NdotH);
 
         float brdf = mix(diffuseBRDF, specularBRDF, fresnel);
         vec3 radiance = irradiance * brdf;

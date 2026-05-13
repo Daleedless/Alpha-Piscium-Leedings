@@ -148,5 +148,4 @@ uniform usampler2D usam_restirReuseTex4;
 uniform usampler2D usam_restirReuseTex5;
 uniform usampler2D usam_restirReuseTex6;
 uniform usampler2D usam_restirReuseTex7;
-uniform usampler2D usam_restirReuseTex8;
 #endif

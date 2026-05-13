@@ -84,9 +84,9 @@ repeat(8) {
         val pairData = data[i]
         val outputBase = i * 4
         outputData[outputBase] = (pairData[0] and 0xff).toByte()
-        outputData[outputBase + 1] = (pairData[0] and 0xff).toByte()
-        outputData[outputBase + 2] = (pairData[1] and 0xff).toByte()
-        outputData[outputBase + 3] = (pairData[2] and 0xff).toByte()
+        outputData[outputBase + 1] = (pairData[1] and 0xff).toByte()
+        outputData[outputBase + 2] = (pairData[2] and 0xff).toByte()
+        outputData[outputBase + 3] = (pairData[3] and 0xff).toByte()
     }
     outputPath.toFile().writeBytes(outputData)
 }
