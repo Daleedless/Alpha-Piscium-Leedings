@@ -164,7 +164,9 @@ void main() {
         global_dispatchSize2 = uvec4(uvec2((uval_mainImageSizeI + 63) / 64), 3u, 0u);
 
         global_dispatchSize3 = uvec4(0u, 1u, 1u, 0u);
-        uvec2 restirSpatialGroups = uvec2((uval_mainImageSizeI.x + 255) / 256 * 16, (uval_mainImageSizeI.y + 255) / 256 * 8);
+        ivec2 reuseTileCount = (uval_mainImageSizeI + 255) / 256;
+        uvec2 restirSpatialGroups = uvec2(reuseTileCount);
+        restirSpatialGroups.y *= 128;
         global_dispatchSize4 = uvec4(restirSpatialGroups.x, restirSpatialGroups.y, 1u, 0u);
         for (uint i = 0u; i < 16u; i++) {
             global_atomicCounters[i] = 0u;
@@ -287,7 +289,7 @@ void main() {
         global_taaResetFactor = vec4(taaClampStrictness, taaClampMethod, taaHistoryReset, taaClampMix);
         global_motionFactor = vec4(smoothCameraSpeed, cameraSpeedDiff, frontVecDiff, taaSpeedFactor);
 
-        global_restirSpatialTileOffset = ivec2(rand_r2Seq2(frameCounter) * 256.0);
+        global_restirSpatialTileOffset = ivec2(rand_r2Seq2(frameCounter) * 256.0) - 128;
 
         #ifdef SETTING_DOF_MANUAL_FOCUS
         global_focusDistance = SETTING_DOF_FOCUS_DISTANCE_COARSE_COARSE + SETTING_DOF_FOCUS_DISTANCE_COARSE + SETTING_DOF_FOCUS_DISTANCE_FINE;

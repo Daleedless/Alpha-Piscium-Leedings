@@ -7,7 +7,7 @@
 #include "/util/Mat2.glsl"
 #include "/techniques/gi/Reservoir.glsl"
 
-layout(local_size_x = 16, local_size_y = 16) in;
+layout(local_size_x = 256) in;
 
 layout(rgba32ui) uniform uimage2D uimg_rgba32ui;
 
@@ -98,12 +98,12 @@ void main() {
     uvec4 pairData = texelFetch(REUSETEX, localFetchPos, 0);
     ivec2 localA = ivec2(pairData.xy);
     ivec2 localB = ivec2(pairData.zw);
-    localA = (localA + global_restirSpatialTileOffset) % 256;
-    localB = (localB + global_restirSpatialTileOffset) % 256;
+    localA = (localA + global_restirSpatialTileOffset);
+    localB = (localB + global_restirSpatialTileOffset);
     ivec2 texelA = tileOrigin + localA;
     ivec2 texelB = tileOrigin + localB;
-    bool validA = all(lessThan(texelA, uval_mainImageSizeI));
-    bool validB = all(lessThan(texelB, uval_mainImageSizeI));
+    bool validA = all(lessThan(texelA, uval_mainImageSizeI)) && all(greaterThanEqual(texelA, ivec2(0)));
+    bool validB = all(lessThan(texelB, uval_mainImageSizeI)) && all(greaterThanEqual(texelB, ivec2(0)));
     if (!validA || !validB || texelA == texelB) return;
 
     GBufferData gDataA, gDataB;
