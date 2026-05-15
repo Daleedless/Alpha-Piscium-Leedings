@@ -124,11 +124,8 @@ out bool edgeFlag
 void gi_reproject(ivec2 texelPos, float currViewZ) {
     vec2 screenPos = coords_texelToUV(texelPos, uval_mainImageSizeRcp);
     float currEdgeFactor = min4(transient_edgeMaskTemp_gather(screenPos, 0));
-    bool currEdgeFlag = currEdgeFactor < 0.99;
 
-    if (currEdgeFlag){
-        screenPos -= uval_taaJitter * uval_mainImageSizeRcp;
-    }
+    screenPos -= uval_taaJitter * uval_mainImageSizeRcp;
     GBufferData gData = gbufferData_init();
     gbufferData1_unpack(texelFetch(usam_gbufferSolidData1, texelPos, 0), gData);
     gbufferData2_unpack(texelFetch(usam_gbufferSolidData2, texelPos, 0), gData);
@@ -154,9 +151,7 @@ void gi_reproject(ivec2 texelPos, float currViewZ) {
     if (bool(clipFlag)) {
         vec2 curr2PrevScreenClamped = saturate(curr2PrevScreen);
         if (all(lessThan(abs(curr2PrevScreen - curr2PrevScreenClamped), uval_mainImageSizeRcp * 2.0))) {
-            if (currEdgeFlag){
-                curr2PrevScreen += uval_prevTaaJitter * uval_mainImageSizeRcp;
-            }
+            curr2PrevScreen += uval_prevTaaJitter * uval_mainImageSizeRcp;
             vec2 curr2PrevTexelPos = curr2PrevScreen * uval_mainImageSize;
             curr2PrevTexelPos = clamp(curr2PrevTexelPos, vec2(1.0), uval_mainImageSize - 1.0);
 
@@ -376,9 +371,12 @@ void gi_reproject(ivec2 texelPos, float currViewZ) {
     }
 
     if (!valid) {
-        transient_gi1Reprojected_store(texelPos, vec4(0.0, 0.0, 0.0, 16.0));
-        transient_gi2Reprojected_store(texelPos, vec4(0.0, 0.0, 0.0, 16.0));
-        transient_gi5Reprojected_store(texelPos, vec4(0.0));
+        GIHistoryData data = gi_historyData_init();
+        transient_gi1Reprojected_store(texelPos, gi_historyData_pack1(data));
+        transient_gi2Reprojected_store(texelPos, gi_historyData_pack2(data));
+        transient_gi3Reprojected_store(texelPos, gi_historyData_pack3(data));
+        transient_gi4Reprojected_store(texelPos, gi_historyData_pack4(data));
+        transient_gi5Reprojected_store(texelPos, gi_historyData_pack5(data));
 
         ReprojectInfo reprojInfo = reprojectInfo_init();
         transient_gi_diffuse_reprojInfo_store(texelPos, reprojectInfo_pack(reprojInfo));
@@ -425,7 +423,7 @@ void gi_reproject(ivec2 texelPos, float currViewZ) {
                     currViewGeomNormal,
                     curr2PrevViewPos.xyz,
                     glazingAngleFactor,
-                    512.0 * mirrorParallaxFactor + 512.0,
+                    96.0 * mirrorParallaxFactor + 32.0,
                     roughnessWeights,
                     extraNormalWeights,
                     edgeWeights,

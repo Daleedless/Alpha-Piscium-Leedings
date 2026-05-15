@@ -251,7 +251,7 @@ void main() {
 
                     GeomData geomData = _gi_readGeomData(sampleTexelPos, sampleUV);
 
-                    float baseNormalWeight = diffInvAccumFactor * 128.0 + 64.0;
+                    float baseNormalWeight = diffInvAccumFactor * 64.0 + 16.0;
                     float basePlaneDistWeight = diffInvAccumFactor * -256.0 - 128.0;
                     float edgeWeightFP32 = normalWeight(centerGeomData, geomData, baseNormalWeight);
                     edgeWeightFP32 *= planeDistanceWeight(
@@ -379,7 +379,7 @@ void main() {
 
                     GeomData geomData = _gi_readGeomData(sampleTexelPos, sampleUV);
 
-                    float baseNormalWeight = specInvAccumFactor * 128.0 + 256.0;
+                    float baseNormalWeight = specInvAccumFactor * 128.0 + 32.0;
                     float basePlaneDistWeight = specInvAccumFactor * -256.0 - 256.0;
                     float edgeWeightFP32 = normalWeight(centerGeomData, geomData, baseNormalWeight);
                     edgeWeightFP32 *= planeDistanceWeight(
