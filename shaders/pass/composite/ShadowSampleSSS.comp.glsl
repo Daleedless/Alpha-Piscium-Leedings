@@ -328,7 +328,7 @@ void main() {
     params.IgnoreEdgePixels = false;
     params.UsePrecisionOffset = false;
     params.BilinearSamplingOffsetMode = false;
-    params.DebugOutputEdgeMask = false;
+    // params.DebugOutputEdgeMask = false;
     params.DepthBounds = vec2(0.0, 1.0);
     params.UseEarlyOut = true;
     params.LightCoordinate = vec4(
