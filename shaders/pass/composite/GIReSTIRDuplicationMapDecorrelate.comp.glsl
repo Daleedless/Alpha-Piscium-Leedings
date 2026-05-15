@@ -100,9 +100,9 @@ void main() {
         float alpha = 0.1;
         float duplicationScorePower = pow(duplicationScore, alpha);
         float expectedCCap = mix(cCapDefault, cCapMin, duplicationScorePower);
-        #if SETTING_DEBUG_OUTPUT
-        imageStore(uimg_temp1, texelPos, vec4(duplicationScorePower));
-        #endif
+//        #if SETTING_DEBUG_OUTPUT
+//        imageStore(uimg_temp1, texelPos, vec4(duplicationScorePower));
+//        #endif
         reservoir.m = min(reservoir.m, expectedCCap);
         uvec4 packedReservoir = restir_reservoir_pack(reservoir);
         if (frameCond) {

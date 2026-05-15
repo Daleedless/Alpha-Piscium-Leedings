@@ -277,7 +277,7 @@ void WriteScreenSpaceShadow(DispatchParameters params, ivec3 groupID, uint laneI
     result = min(hard_shadow, result);
 
     #if SETTING_DEBUG_OUTPUT
-    imageStore(uimg_temp1, writeTexel, vec4(is_edge ? 1.0 : 0.0));
+    // imageStore(uimg_temp1, writeTexel, vec4(is_edge ? 1.0 : 0.0));
     #endif
 
     // Store

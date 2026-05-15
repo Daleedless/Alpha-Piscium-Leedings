@@ -192,7 +192,9 @@ void main() {
             #if GI_DENOISE_PASS == 2
             hitDistFactor = pow2(hitDistFactor);
             #endif
-            hitDistFactor = hitDistFactor * 0.9 + 0.1;
+            #if SETTING_DEBUG_OUTPUT
+            imageStore(uimg_temp1, texelPos, hitDistFactor.yyyy);
+            #endif
 
             float16_t jitterR = float16_t(blurJitter.y);
             float angle = blurJitter.x * PI_2;
@@ -218,7 +220,7 @@ void main() {
                 f16vec2 kernelRadius2 = f16vec2(kernelRadius * stretchFactor);
 
                 float sigmaFP32 = 0.69;
-                sigmaFP32 += 1.0 - saturate(hitDistFactor.x);
+                sigmaFP32 += 1.0 - hitDistFactor.x;
                 sigmaFP32 *= 1.0 - filteredInputVariance.x;
                 float16_t sigma = float16_t(-sigmaFP32);
 
@@ -342,7 +344,7 @@ void main() {
                 f16vec3 specB = f16vec3(specBFP32);
 
                 float sigmaFP32 = 0.69;
-                sigmaFP32 += 1.0 - saturate(hitDistFactor.y);
+                sigmaFP32 += 8.0 - hitDistFactor.y * 8.0;
                 sigmaFP32 *= 1.0 - filteredInputVariance.y;
                 sigmaFP32 += 0.025 * rcp(max(centerGeomData.roughness, 0.005));
                 float16_t sigma = float16_t(-sigmaFP32);
