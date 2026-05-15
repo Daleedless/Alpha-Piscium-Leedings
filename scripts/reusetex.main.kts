@@ -1,10 +1,12 @@
 import kotlin.io.path.Path
+import kotlin.math.pow
+import kotlin.math.sqrt
 import kotlin.random.Random
 
-fun main(baseSeed: Long): List<List<Int>> {
-    val size = 256
-    val sigma = 16.0
+val size = 256
+val sigma = 16.0
 
+fun main(baseSeed: Long): List<List<Int>> {
     val pairs = Array(size) { IntArray(size) }
     var i = 0
     for (y in 0..<size) {
@@ -17,26 +19,30 @@ fun main(baseSeed: Long): List<List<Int>> {
     val randoms = Array(size / 2) { Array(size / 2) { Random(baseRandom.nextLong()) } }
 
     fun sigmaToShuffleCount(sigma: Double): Int {
-        return ((sigma * sigma) / 2.0 + 0.5).toInt()
+        return (0.5 * sigma.pow(2) + 1.46 * sigma.pow(-1) + 1.76 * sigma.pow(-2) + 0.656 * sigma.pow(-3) + 0.5).toInt()
     }
 
-    fun shuffleGrid(offsetY: Int, offsetX: Int) {
-        for (y in 0..<size / 2) {
+    fun shuffleGrid(offsetX: Int, offsetY: Int) {
+        val countX = if (offsetX == 0) size / 2 else size / 2 - 1
+        val countY = if (offsetY == 0) size / 2 else size / 2 - 1
+
+        for (y in 0..<countY) {
             val dstY = y * 2 + offsetY
-            for (x in 0..<size / 2) {
+            for (x in 0..<countX) {
                 val dstX = x * 2 + offsetX
                 val permuteTemp = IntArray(4)
                 var i = 0
                 for (dy in 0..<2) {
                     for (dx in 0..<2) {
-                        permuteTemp[i++] = pairs[(dstY + dy) % size][(dstX + dx) % size]
+                        permuteTemp[i++] = pairs[dstY + dy][dstX + dx]
                     }
                 }
                 permuteTemp.shuffle(randoms[y][x])
                 i = 0
                 for (dy in 0..<2) {
                     for (dx in 0..<2) {
-                        pairs[(dstY + dy) % size][(dstX + dx) % size] = permuteTemp[i++]
+                        // 彻底移除 % size
+                        pairs[dstY + dy][dstX + dx] = permuteTemp[i++]
                     }
                 }
             }
@@ -44,7 +50,7 @@ fun main(baseSeed: Long): List<List<Int>> {
     }
 
     repeat(sigmaToShuffleCount(sigma)) {
-        shuffleGrid(it, it)
+        shuffleGrid(it and 1, it and 1)
     }
 
     val pairPos = Array(size * size / 2) { IntArray(5) }
@@ -56,15 +62,6 @@ fun main(baseSeed: Long): List<List<Int>> {
             arr[idx + 1] = x
             arr[idx + 2] = y
         }
-    }
-
-    fun encodeMorton(x: Int, y: Int): Int {
-        var res = x.toLong() or (y.toLong() shl 32)
-        res = (res or (res shl 8)) and -0xf00ff
-        res = (res or (res shl 4)) and -0x0f0f0f
-        res = (res or (res shl 2)) and -0x3333333
-        res = (res or (res shl 1)) and -0x5555555
-        return (res or (res shr 31)).toInt()
     }
 
     val temp = pairPos.map { it.slice(1..<5) }
@@ -90,13 +87,29 @@ fun main(baseSeed: Long): List<List<Int>> {
             }
         }
     }
+
     return final
 }
 
 val baseRandom = Random(1145141919810L)
 val basePath = Path("../shaders/textures")
+val dists = mutableListOf<Double>()
 repeat(8) {
     val data = main(baseRandom.nextLong())
+
+    for (pairs in data) {
+        val x1 = pairs[0]
+        val y1 = pairs[1]
+        val x2 = pairs[2]
+        val y2 = pairs[3]
+        var dx = x2 - x1
+        if (dx > size / 2) dx -= size else if (dx < -size / 2) dx += size
+        var dy = y2 - y1
+        if (dy > size / 2) dy -= size else if (dy < -size / 2) dy += size
+        val distSq = dx * dx + dy * dy
+        dists += sqrt(distSq.toDouble())
+    }
+
     val outputPath = basePath.resolve("restir_reusetex${it}.bin")
     val outputData = ByteArray(data.size * 4)
     for (i in data.indices) {
@@ -109,3 +122,15 @@ repeat(8) {
     }
     outputPath.toFile().writeBytes(outputData)
 }
+
+val mean = dists.average()
+val stddev = sqrt(dists.map { (it - mean).pow(2) }.average())
+println("Mean: $mean")
+println("Stddev: $stddev")
+
+val bins = IntArray(1024)
+dists.forEach {
+    bins[it.toInt()]++
+}
+val histo = bins.slice(0..bins.indexOfLast { it != 0 })
+println("Histogram: $histo")
