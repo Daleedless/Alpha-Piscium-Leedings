@@ -59,13 +59,35 @@ void main() {
             uvec4 reprojectedData = bool(frameCounter & 1) ? history_restir_reservoirTemporal1_fetch(texelPos) : history_restir_reservoirTemporal2_fetch(texelPos);
             ReSTIRReservoir temporalReservoir = restir_reservoir_unpack(reprojectedData);
 
-            ReSTIRReservoir spatialReservoir = restir_reservoir_unpack(transient_restir_spatialReservoirAccum_fetch(texelPos));
             PairwiseMISMetadata metadata = pairwiseMISMetadata_unpack(transient_restir_pairwiseMISMetadata_fetch(texelPos));
 
             ivec2 winTexel = metadata.selectedTexel;
             uint numValidNeighbors = metadata.numValidNeighbors;
             float mc = metadata.mc;
             float spatialWSum = metadata.spatialWSum;
+            ReSTIRReservoir spatialReservoir = restir_initReservoir();
+            spatialReservoir.Y = temporalReservoir.Y;
+            spatialReservoir.m = transient_restir_spatialReservoirAccum_fetch(texelPos).x;
+
+            vec4 selectedSampleF = centerSampleData.sampleValue;
+            if (winTexel != texelPos) {
+                SpatialSampleData winSample = spatialSampleData_unpack(transient_restir_spatialInput_fetch(winTexel));
+                float winViewZ = texelFetch(usam_gbufferSolidViewZ, winTexel, 0).x;
+                vec2 winScreenPos = coords_texelToUV(winTexel, uval_mainImageSizeRcp);
+                vec3 winViewPos = coords_toViewCoord(winScreenPos, winViewZ, global_camProjInverse);
+
+                uvec4 winRep = bool(frameCounter & 1) ? history_restir_reservoirTemporal1_fetch(winTexel) : history_restir_reservoirTemporal2_fetch(winTexel);
+                ReSTIRReservoir winRes = restir_reservoir_unpack(winRep);
+
+                GBufferData gData = gbufferData_init();
+                gbufferData1_unpack(texelFetch(usam_gbufferSolidData1, texelPos, 0), gData);
+                gbufferData2_unpack(texelFetch(usam_gbufferSolidData2, texelPos, 0), gData);
+                Material material = material_decode(gData);
+
+                ShiftMapping winToCenter = evaluateShiftMapping(winRes, material, centerSampleData, winSample, viewPos, winViewPos);
+                spatialReservoir.Y = winToCenter.Y;
+                selectedSampleF = vec4(winSample.sampleValue.xyz, winToCenter.targetPHat);
+            }
 
             float rcAvgWY = max(temporalReservoir.avgWY, 0.0);
             float canonicalWi = centerSampleData.sampleValue.w * rcAvgWY * mc;
@@ -80,34 +102,8 @@ void main() {
                 canonicalRand
             );
 
-            vec4 selectedSampleF;
             if (chooseCanon || winTexel == texelPos) {
                 selectedSampleF = centerSampleData.sampleValue;
-            } else {
-                SpatialSampleData winSample = spatialSampleData_unpack(transient_restir_spatialInput_fetch(winTexel));
-                float winViewZ = texelFetch(usam_gbufferSolidViewZ, winTexel, 0).x;
-                vec2 winScreenPos = coords_texelToUV(winTexel, uval_mainImageSizeRcp);
-                vec3 winViewPos = coords_toViewCoord(winScreenPos, winViewZ, global_camProjInverse);
-
-                uvec4 winRep = bool(frameCounter & 1) ? history_restir_reservoirTemporal1_fetch(winTexel) : history_restir_reservoirTemporal2_fetch(winTexel);
-                ReSTIRReservoir winRes = restir_reservoir_unpack(winRep);
-
-                vec3 winHitViewPos = winViewPos + winRes.Y.xyz * winRes.Y.w;
-                vec3 diff = winHitViewPos - viewPos;
-                float dist2 = dot(diff, diff);
-                vec3 dir = diff * inversesqrt(dist2);
-
-                GBufferData gData = gbufferData_init();
-                gbufferData1_unpack(texelFetch(usam_gbufferSolidData1, texelPos, 0), gData);
-                gbufferData2_unpack(texelFetch(usam_gbufferSolidData2, texelPos, 0), gData);
-                Material material = material_decode(gData);
-
-                float pHat = evalTargetFunction(winSample.sampleValue.xyz, centerSampleData.normal, dir, V, material);
-                float cosPhiWin = -dot(winRes.Y.xyz, winSample.hitNormal);
-                float cosPhiCenter = -dot(dir, winSample.hitNormal);
-
-                float jacobian = clamp(((winRes.Y.w * winRes.Y.w) * cosPhiCenter) / (dist2 * cosPhiWin), 0.0, 256.0);
-                selectedSampleF = vec4(winSample.sampleValue.xyz, pHat * jacobian);
             }
 
             vec4 ssgiDiffOut = vec4(0.0, 0.0, 0.0, -1.0);

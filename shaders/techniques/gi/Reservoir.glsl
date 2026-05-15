@@ -134,3 +134,58 @@ float evalTargetFunction(vec3 irradiance, vec3 normal, vec3 lightDir, vec3 viewD
     }
     return result;
 }
+
+struct ShiftMapping {
+    vec4 Y;
+    float targetPHat;
+    float reusableTargetPHat;
+};
+
+ShiftMapping shiftMapping_init() {
+    ShiftMapping mapping;
+    mapping.Y = vec4(0.0, 0.0, 0.0, -1.0);
+    mapping.targetPHat = 0.0;
+    mapping.reusableTargetPHat = 0.0;
+    return mapping;
+}
+
+bool shiftMapping_hasTarget(ShiftMapping mapping) {
+    return mapping.targetPHat > 0.0;
+}
+
+bool shiftMapping_isReusable(ShiftMapping mapping) {
+    return mapping.reusableTargetPHat > 0.0;
+}
+
+ShiftMapping evaluateShiftMapping(
+ReSTIRReservoir canonResSRC,
+Material matDST,
+SpatialSampleData sampleDST, SpatialSampleData sampleSRC,
+vec3 viewPosDST, vec3 viewPosSRC
+) {
+    ShiftMapping mapping = shiftMapping_init();
+
+    vec3 hitViewPosSRC = viewPosSRC + canonResSRC.Y.xyz * canonResSRC.Y.w;
+    vec3 diffSRCtoDST = hitViewPosSRC - viewPosDST;
+    float dist2 = dot(diffSRCtoDST, diffSRCtoDST);
+    if (dist2 > 1e-6 && canonResSRC.Y.w > 1e-6 && restir_isReservoirValid(canonResSRC)) {
+        vec3 dirSRCtoDST = diffSRCtoDST * inversesqrt(dist2);
+        float cosSRC = dot(sampleSRC.normal, canonResSRC.Y.xyz);
+        float cosPhiSRC = -dot(canonResSRC.Y.xyz, sampleSRC.hitNormal);
+        float cosPhiDST = -dot(dirSRCtoDST, sampleSRC.hitNormal);
+        if (cosPhiSRC > 0.0 && cosPhiDST > 0.0) {
+            vec3 VDST = normalize(-viewPosDST);
+            float pHat = evalTargetFunction(sampleSRC.sampleValue.xyz, sampleDST.normal, dirSRCtoDST, VDST, matDST);
+            if (pHat > 0.0) {
+                float jacobian_DST = clamp(((canonResSRC.Y.w * canonResSRC.Y.w) * cosPhiDST) / (dist2 * cosPhiSRC), 0.0, 256.0);
+                mapping.Y = vec4(dirSRCtoDST, sqrt(dist2));
+                mapping.targetPHat = pHat * jacobian_DST;
+                if (cosSRC > 0.0) {
+                    mapping.reusableTargetPHat = mapping.targetPHat;
+                }
+            }
+        }
+    }
+
+    return mapping;
+}

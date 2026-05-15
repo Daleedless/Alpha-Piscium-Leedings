@@ -9,6 +9,7 @@
 
 layout(local_size_x = 256) in;
 
+layout(r32f) uniform restrict image2D uimg_r32f;
 layout(rgba32ui) uniform restrict uimage2D uimg_rgba32ui;
 
 /*const*/
@@ -31,64 +32,15 @@ layout(rgba32ui) uniform restrict uimage2D uimg_rgba32ui;
 #endif
 /*const*/
 
-struct ShiftMapping {
-    vec4 Y;
-    float targetPHat;
-    float reusableTargetPHat;
-};
-
-ShiftMapping shiftMapping_init() {
-    ShiftMapping mapping;
-    mapping.Y = vec4(0.0, 0.0, 0.0, -1.0);
-    mapping.targetPHat = 0.0;
-    mapping.reusableTargetPHat = 0.0;
-    return mapping;
-}
-
-bool shiftMapping_hasTarget(ShiftMapping mapping) {
-    return mapping.targetPHat > 0.0;
-}
-
-bool shiftMapping_isReusable(ShiftMapping mapping) {
-    return mapping.reusableTargetPHat > 0.0;
-}
-
-ShiftMapping evaluateShiftMapping(
-ReSTIRReservoir canonResSRC,
-Material matDST,
-SpatialSampleData sampleDST, SpatialSampleData sampleSRC,
-vec3 viewPosDST, vec3 viewPosSRC
-) {
-    ShiftMapping mapping = shiftMapping_init();
-
-    vec3 hitViewPosSRC = viewPosSRC + canonResSRC.Y.xyz * canonResSRC.Y.w;
-    vec3 diffSRCtoDST = hitViewPosSRC - viewPosDST;
-    float dist2 = dot(diffSRCtoDST, diffSRCtoDST);
-    if (dist2 > 1e-6 && canonResSRC.Y.w > 1e-6 && restir_isReservoirValid(canonResSRC)) {
-        vec3 dirSRCtoDST = diffSRCtoDST * inversesqrt(dist2);
-        float cosSRC = dot(sampleSRC.normal, canonResSRC.Y.xyz);
-        float cosPhiSRC = -dot(canonResSRC.Y.xyz, sampleSRC.hitNormal);
-        float cosPhiDST = -dot(dirSRCtoDST, sampleSRC.hitNormal);
-        if (cosPhiSRC > 0.0 && cosPhiDST > 0.0) {
-            vec3 VDST = normalize(-viewPosDST);
-            float pHat = evalTargetFunction(sampleSRC.sampleValue.xyz, sampleDST.normal, dirSRCtoDST, VDST, matDST);
-            if (pHat > 0.0) {
-                float jacobian_DST = clamp(((canonResSRC.Y.w * canonResSRC.Y.w) * cosPhiDST) / (dist2 * cosPhiSRC), 0.0, 256.0);
-                mapping.Y = vec4(dirSRCtoDST, sqrt(dist2));
-                mapping.targetPHat = pHat * jacobian_DST;
-                if (cosSRC > 0.0) {
-                    mapping.reusableTargetPHat = mapping.targetPHat;
-                }
-            }
-        }
-    }
-
-    return mapping;
+bool restir_updateReservoirM(inout float reservoirM, inout float wSum, float wi, float m, float rand) {
+    wSum += wi;
+    reservoirM += m;
+    return rand < wi / wSum;
 }
 
 void applyShiftMapping(
 ivec2 texelDST, ivec2 texelSRC,
-inout ReSTIRReservoir accumResDST,
+inout float accumMDST,
 ReSTIRReservoir canonResDST, ReSTIRReservoir canonResSRC,
 inout PairwiseMISMetadata metaDST,
 SpatialSampleData sampleDST, SpatialSampleData sampleSRC,
@@ -111,7 +63,7 @@ ShiftMapping srcToDst, ShiftMapping dstToSrc
         float neighborWi = srcToDst.reusableTargetPHat * max(canonResSRC.avgWY, 0.0) * mi_DST;
         float spatialWSumDST = metaDST.spatialWSum;
         float neighborRand = rand_stbnVec1(rand_newStbnPos(texelDST, RANDOM_FRAME / 64u + 4u + PASS_INDEX), RANDOM_FRAME);
-        if (restir_updateReservoir(accumResDST, spatialWSumDST, srcToDst.Y, neighborWi, canonResSRC.m, neighborRand)) {
+        if (restir_updateReservoirM(accumMDST, spatialWSumDST, neighborWi, canonResSRC.m, neighborRand)) {
             metaDST.selectedTexel = texelSRC;
         }
         metaDST.spatialWSum = spatialWSumDST;
@@ -135,18 +87,18 @@ void main() {
     bool validA = all(lessThan(ivec4(texelA, -1, -1), ivec4(uval_mainImageSizeI, texelA)));
     bool validB = all(lessThan(ivec4(texelB, -1, -1), ivec4(uval_mainImageSizeI, texelB)));
 
-    ReSTIRReservoir accumResA = restir_initReservoir();
-    ReSTIRReservoir accumResB = restir_initReservoir();
+    float accumMA = 0.0;
+    float accumMB = 0.0;
 
     PairwiseMISMetadata metaA = pairwiseMISMetadata_init(texelA);
     PairwiseMISMetadata metaB = pairwiseMISMetadata_init(texelB);
     #if PASS_INDEX != 0
-    uvec4 spatialReservoirAccumA = transient_restir_spatialReservoirAccum_fetch(texelA);
-    uvec4 spatialReservoirAccumB = transient_restir_spatialReservoirAccum_fetch(texelB);
+    vec4 spatialReservoirAccumA = transient_restir_spatialReservoirAccum_fetch(texelA);
+    vec4 spatialReservoirAccumB = transient_restir_spatialReservoirAccum_fetch(texelB);
     uvec4 pairwiseMISMetadataA = transient_restir_pairwiseMISMetadata_fetch(texelA);
     uvec4 pairwiseMISMetadataB = transient_restir_pairwiseMISMetadata_fetch(texelB);
-    accumResA = restir_reservoir_unpack(spatialReservoirAccumA);
-    accumResB = restir_reservoir_unpack(spatialReservoirAccumB);
+    accumMA = spatialReservoirAccumA.x;
+    accumMB = spatialReservoirAccumB.x;
     metaA = pairwiseMISMetadata_unpack(pairwiseMISMetadataA);
     metaB = pairwiseMISMetadata_unpack(pairwiseMISMetadataB);
     #endif
@@ -188,8 +140,8 @@ void main() {
             ReSTIRReservoir canonResB = restir_reservoir_unpack(repB);
 
             #if PASS_INDEX == 0
-            accumResA = canonResA;
-            accumResB = canonResB;
+            accumMA = canonResA.m;
+            accumMB = canonResB.m;
             #endif
 
             if (dot(sampleA.geomNormal, sampleB.geomNormal) > 0.99) {
@@ -200,8 +152,8 @@ void main() {
 
                 ShiftMapping shiftAtoB = evaluateShiftMapping(canonResA, matB, sampleB, sampleA, viewPosB, viewPosA);
                 ShiftMapping shiftBtoA = evaluateShiftMapping(canonResB, matA, sampleA, sampleB, viewPosA, viewPosB);
-                applyShiftMapping(texelA, texelB, accumResA, canonResA, canonResB, metaA, sampleA, sampleB, shiftBtoA, shiftAtoB);
-                applyShiftMapping(texelB, texelA, accumResB, canonResB, canonResA, metaB, sampleB, sampleA, shiftAtoB, shiftBtoA);
+                applyShiftMapping(texelA, texelB, accumMA, canonResA, canonResB, metaA, sampleA, sampleB, shiftBtoA, shiftAtoB);
+                applyShiftMapping(texelB, texelA, accumMB, canonResB, canonResA, metaB, sampleB, sampleA, shiftAtoB, shiftBtoA);
             }
         }
     }
@@ -209,6 +161,6 @@ void main() {
     transient_restir_pairwiseMISMetadata_store(texelA, pairwiseMISMetadata_pack(metaA));
     transient_restir_pairwiseMISMetadata_store(texelB, pairwiseMISMetadata_pack(metaB));
 
-    transient_restir_spatialReservoirAccum_store(texelA, restir_reservoir_pack(accumResA));
-    transient_restir_spatialReservoirAccum_store(texelB, restir_reservoir_pack(accumResB));
+    transient_restir_spatialReservoirAccum_store(texelA, vec4(accumMA));
+    transient_restir_spatialReservoirAccum_store(texelB, vec4(accumMB));
 }
