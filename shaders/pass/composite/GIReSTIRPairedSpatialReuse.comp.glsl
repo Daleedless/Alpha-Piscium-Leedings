@@ -37,6 +37,46 @@ bool restir_updateReservoirM(inout float reservoirM, inout float wSum, float wi,
     return rand < wi / wSum;
 }
 
+
+
+ShiftMapping evaluateShiftMapping(
+ivec2 texelDST,
+ReSTIRReservoir canonResSRC,
+SpatialSampleData sampleDST, SpatialSampleData sampleSRC,
+vec3 viewPosDST, vec3 viewPosSRC
+) {
+    const float EPSILON = 1e-6;
+    ShiftMapping mapping = shiftMapping_init();
+
+    if (canonResSRC.Y.w > EPSILON && restir_isReservoirValid(canonResSRC)) {
+        vec3 hitViewPosSRC = viewPosSRC + canonResSRC.Y.xyz * canonResSRC.Y.w;
+        vec3 diffSRCtoDST = hitViewPosSRC - viewPosDST;
+        float dist2 = dot(diffSRCtoDST, diffSRCtoDST);
+        if (dist2 > EPSILON) {
+            vec3 dirSRCtoDST = diffSRCtoDST * inversesqrt(dist2);
+            float cosSRC = dot(sampleSRC.normal, canonResSRC.Y.xyz);
+            float cosPhiSRC = -dot(canonResSRC.Y.xyz, sampleSRC.hitNormal);
+            float cosPhiDST = -dot(dirSRCtoDST, sampleSRC.hitNormal);
+            if (cosPhiSRC > 0.0 && cosPhiDST > 0.0) {
+                vec3 VDST = normalize(-viewPosDST);
+                vec4 resampleMaterialDataDST = transient_restir_resampleMaterial_fetch(texelDST);
+                ResampleMaterial matDST = resampleMaterial_unpack(resampleMaterialDataDST);
+                float pHat = evalTargetFunction(sampleSRC.sampleValue.xyz, sampleDST.normal, dirSRCtoDST, VDST, matDST);
+                if (pHat > 0.0) {
+                    float jacobian_DST = clamp(((canonResSRC.Y.w * canonResSRC.Y.w) * cosPhiDST) / (dist2 * cosPhiSRC), 0.0, 256.0);
+                    mapping.Y = vec4(dirSRCtoDST, sqrt(dist2));
+                    mapping.targetPHat = pHat * jacobian_DST;
+                    if (cosSRC > 0.0) {
+                        mapping.reusableTargetPHat = mapping.targetPHat;
+                    }
+                }
+            }
+        }
+    }
+
+    return mapping;
+}
+
 void doResample(
 ivec2 texelDST, ivec2 texelSRC,
 ReSTIRReservoir canonResDST, ReSTIRReservoir canonResSRC,
@@ -87,10 +127,10 @@ void main() {
     localB = (localB + uval_restirSpatialTileOffset);
     ivec2 texelA = tileOrigin + localA;
     ivec2 texelB = tileOrigin + localB;
-    bool validA = all(lessThan(ivec4(texelA, -1, -1), ivec4(uval_mainImageSizeI, texelA)));
-    bool validB = all(lessThan(ivec4(texelB, -1, -1), ivec4(uval_mainImageSizeI, texelB)));
+    uint validA = uint(all(lessThan(ivec4(texelA, ivec2(-1)), ivec4(uval_mainImageSizeI, texelA))));
+    uint validB = uint(all(lessThan(ivec4(texelB, ivec2(-1)), ivec4(uval_mainImageSizeI, texelB))));
 
-    if (validA && validB && texelA != texelB){
+    if (bool(validA & validB & uint(texelA != texelB))){
         float viewZA = texelFetch(usam_gbufferSolidViewZ, texelA, 0).x;
         float viewZB = texelFetch(usam_gbufferSolidViewZ, texelB, 0).x;
         if (viewZA > -65536.0 && viewZB > -65536.0) {
@@ -119,11 +159,8 @@ void main() {
                 ReSTIRReservoir canonResA = restir_reservoir_unpack(repA);
                 ReSTIRReservoir canonResB = restir_reservoir_unpack(repB);
 
-                ResampleMaterial matA = resampleMaterial_unpack(transient_restir_resampleMaterial_fetch(texelA));
-                ShiftMapping shiftBtoA = evaluateShiftMapping(canonResB, matA, sampleA, sampleB, viewPosA, viewPosB);
-
-                ResampleMaterial matB = resampleMaterial_unpack(transient_restir_resampleMaterial_fetch(texelB));
-                ShiftMapping shiftAtoB = evaluateShiftMapping(canonResA, matB, sampleB, sampleA, viewPosB, viewPosA);
+                ShiftMapping shiftBtoA = evaluateShiftMapping(texelA, canonResB, sampleA, sampleB, viewPosA, viewPosB);
+                ShiftMapping shiftAtoB = evaluateShiftMapping(texelB, canonResA, sampleB, sampleA, viewPosB, viewPosA);
 
                 doResample(texelA, texelB, canonResA, canonResB, sampleA, sampleB, shiftBtoA, shiftAtoB);
                 doResample(texelB, texelA, canonResB, canonResA, sampleB, sampleA, shiftAtoB, shiftBtoA);

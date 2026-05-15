@@ -162,11 +162,12 @@ bool shiftMapping_isReusable(ShiftMapping mapping) {
     return mapping.reusableTargetPHat > 0.0;
 }
 
+
 ShiftMapping evaluateShiftMapping(
-ReSTIRReservoir canonResSRC,
-ResampleMaterial matDST,
-SpatialSampleData sampleDST, SpatialSampleData sampleSRC,
-vec3 viewPosDST, vec3 viewPosSRC
+    ReSTIRReservoir canonResSRC,
+    ResampleMaterial matDST,
+    SpatialSampleData sampleDST, SpatialSampleData sampleSRC,
+    vec3 viewPosDST, vec3 viewPosSRC
 ) {
     ShiftMapping mapping = shiftMapping_init();
 
