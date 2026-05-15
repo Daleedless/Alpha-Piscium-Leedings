@@ -876,34 +876,6 @@ options(File("shaders.properties"), File("../shaders"), "base/Options.glsl", "ba
                         comment = "重用GI样本的附近像素数量。"
                     }
                 }
-                toggle("SETTING_GI_SPATIAL_REUSE_COUNT_DYNAMIC", false) {
-                    lang {
-                        name = "Dynamic Spatial Reuse Sample Count"
-                        comment = "Decreases spatial reuse sample count to reduce biases for accumulated result."
-                    }
-                    lang(Locale.SIMPLIFIED_CHINESE) {
-                        name = "动态空间重用采样数"
-                        comment = "减少空间重用采样数以降低累积结果的偏差。"
-                    }
-                }
-                slider("SETTING_GI_SPATIAL_REUSE_RADIUS", 64, powerOfTwoAndHalfRange(4..8)) {
-                    Profile.Low preset 24
-                    Profile.Medium preset 32
-                    Profile.High preset 48
-                    Profile.Ultra preset 64
-                    Profile.Extreme preset 64
-                    Profile.Insane preset 64
-                    lang {
-                        name = "Spatial Reuse Radius"
-                        comment = "Radius to search for nearby GI samples to reuse."
-                        suffix = " pixels"
-                    }
-                    lang(Locale.SIMPLIFIED_CHINESE) {
-                        name = "空间重用半径"
-                        comment = "搜索以重用附近GI样本的半径。"
-                        suffix = " 像素"
-                    }
-                }
                 empty()
                 toggle("SETTING_GI_DECORRELATE", false) {
                     lang {

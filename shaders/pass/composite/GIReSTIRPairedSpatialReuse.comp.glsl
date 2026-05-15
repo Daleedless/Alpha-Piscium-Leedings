@@ -88,7 +88,7 @@ ShiftMapping srcToDst, ShiftMapping dstToSrc
         PairwiseMISMetadata metaDST = pairwiseMISMetadata_unpack(pairwiseMISMetadataDST);
         float accumMDST = metaDST.accumM;
 
-        float rcMDivK_DST = canonResDST.m / 8.0;
+        float rcMDivK_DST = canonResDST.m / SETTING_GI_SPATIAL_REUSE_COUNT;
         float MiPiRiY = canonResSRC.m * sampleSRC.sampleValue.w;
         float mi_DST = MiPiRiY * safeRcp(MiPiRiY + rcMDivK_DST * srcToDst.reusableTargetPHat);
 
