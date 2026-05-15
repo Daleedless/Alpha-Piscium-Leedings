@@ -90,7 +90,7 @@ void applyShiftMapping(
 ivec2 texelDST, ivec2 texelSRC,
 inout ReSTIRReservoir accumResDST,
 ReSTIRReservoir canonResDST, ReSTIRReservoir canonResSRC,
-inout uvec4 metaDST,
+inout PairwiseMISMetadata metaDST,
 SpatialSampleData sampleDST, SpatialSampleData sampleSRC,
 ShiftMapping srcToDst, ShiftMapping dstToSrc
 ) {
@@ -105,17 +105,16 @@ ShiftMapping srcToDst, ShiftMapping dstToSrc
             mcIncrement_DST = 1.0 - MiPiRcY * safeRcp(MiPiRcY + rcMDivK_DST * sampleDST.sampleValue.w);
         }
 
-        float mc_DST = uintBitsToFloat(metaDST.z) + mcIncrement_DST;
-        metaDST.z = floatBitsToUint(mc_DST);
-        metaDST.y += 1u;
+        metaDST.mc += mcIncrement_DST;
+        metaDST.numValidNeighbors += 1u;
 
         float neighborWi = srcToDst.reusableTargetPHat * max(canonResSRC.avgWY, 0.0) * mi_DST;
-        float spatialWSumDST = uintBitsToFloat(metaDST.w);
+        float spatialWSumDST = metaDST.spatialWSum;
         float neighborRand = rand_stbnVec1(rand_newStbnPos(texelDST, RANDOM_FRAME / 64u + 4u + PASS_INDEX), RANDOM_FRAME);
         if (restir_updateReservoir(accumResDST, spatialWSumDST, srcToDst.Y, neighborWi, canonResSRC.m, neighborRand)) {
-            metaDST.x = packUInt2x16(uvec2(texelSRC));
+            metaDST.selectedTexel = texelSRC;
         }
-        metaDST.w = floatBitsToUint(spatialWSumDST);
+        metaDST.spatialWSum = spatialWSumDST;
     }
 }
 
@@ -139,16 +138,13 @@ void main() {
     ReSTIRReservoir accumResA = restir_initReservoir();
     ReSTIRReservoir accumResB = restir_initReservoir();
 
-    uvec4 metaA = uvec4(0);
-    uvec4 metaB = uvec4(0);
-    #if PASS_INDEX == 0
-    metaA = uvec4(packUInt2x16(uvec2(texelA)), 0u, floatBitsToUint(1.0), 0u);
-    metaB = uvec4(packUInt2x16(uvec2(texelB)), 0u, floatBitsToUint(1.0), 0u);
-    #else
+    PairwiseMISMetadata metaA = pairwiseMISMetadata_init(texelA);
+    PairwiseMISMetadata metaB = pairwiseMISMetadata_init(texelB);
+    #if PASS_INDEX != 0
     accumResA = restir_reservoir_unpack(transient_restir_spatialReservoirAccum_load(texelA));
     accumResB = restir_reservoir_unpack(transient_restir_spatialReservoirAccum_load(texelB));
-    metaA = transient_restir_pairwiseMISMetadata_load(texelA);
-    metaB = transient_restir_pairwiseMISMetadata_load(texelB);
+    metaA = pairwiseMISMetadata_unpack(transient_restir_pairwiseMISMetadata_load(texelA));
+    metaB = pairwiseMISMetadata_unpack(transient_restir_pairwiseMISMetadata_load(texelB));
     #endif
 
     if (validA && validB && texelA != texelB){
@@ -206,8 +202,8 @@ void main() {
         }
     }
 
-    transient_restir_pairwiseMISMetadata_store(texelA, metaA);
-    transient_restir_pairwiseMISMetadata_store(texelB, metaB);
+    transient_restir_pairwiseMISMetadata_store(texelA, pairwiseMISMetadata_pack(metaA));
+    transient_restir_pairwiseMISMetadata_store(texelB, pairwiseMISMetadata_pack(metaB));
 
     transient_restir_spatialReservoirAccum_store(texelA, restir_reservoir_pack(accumResA));
     transient_restir_spatialReservoirAccum_store(texelB, restir_reservoir_pack(accumResB));

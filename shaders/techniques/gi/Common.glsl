@@ -153,6 +153,40 @@ uvec4 reprojectInfo_pack(ReprojectInfo info) {
     return packedData;
 }
 
+struct PairwiseMISMetadata {
+    ivec2 selectedTexel;
+    uint numValidNeighbors;
+    float mc;
+    float spatialWSum;
+};
+
+PairwiseMISMetadata pairwiseMISMetadata_init(ivec2 texel) {
+    PairwiseMISMetadata metadata;
+    metadata.selectedTexel = texel;
+    metadata.numValidNeighbors = 0u;
+    metadata.mc = 1.0;
+    metadata.spatialWSum = 0.0;
+    return metadata;
+}
+
+PairwiseMISMetadata pairwiseMISMetadata_unpack(uvec4 packedData) {
+    PairwiseMISMetadata metadata;
+    metadata.selectedTexel = ivec2(unpackUInt2x16(packedData.x));
+    metadata.numValidNeighbors = packedData.y;
+    metadata.mc = uintBitsToFloat(packedData.z);
+    metadata.spatialWSum = uintBitsToFloat(packedData.w);
+    return metadata;
+}
+
+uvec4 pairwiseMISMetadata_pack(PairwiseMISMetadata metadata) {
+    uvec4 packedData;
+    packedData.x = packUInt2x16(uvec2(metadata.selectedTexel));
+    packedData.y = metadata.numValidNeighbors;
+    packedData.z = floatBitsToUint(metadata.mc);
+    packedData.w = floatBitsToUint(metadata.spatialWSum);
+    return packedData;
+}
+
 vec2 _gi_mirrorUV(vec2 uv) {
     return 1.0 - abs(1.0 - (fract(uv * 0.5) * 2.0));
 }

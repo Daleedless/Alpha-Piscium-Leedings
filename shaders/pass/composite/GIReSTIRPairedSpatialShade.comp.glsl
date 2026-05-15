@@ -60,12 +60,12 @@ void main() {
             ReSTIRReservoir temporalReservoir = restir_reservoir_unpack(reprojectedData);
 
             ReSTIRReservoir spatialReservoir = restir_reservoir_unpack(transient_restir_spatialReservoirAccum_fetch(texelPos));
-            uvec4 meta = transient_restir_pairwiseMISMetadata_fetch(texelPos);
+            PairwiseMISMetadata metadata = pairwiseMISMetadata_unpack(transient_restir_pairwiseMISMetadata_fetch(texelPos));
 
-            ivec2 winTexel = ivec2(unpackUInt2x16(meta.x));
-            uint numValidNeighbors = meta.y;
-            float mc = uintBitsToFloat(meta.z);
-            float spatialWSum = uintBitsToFloat(meta.w);
+            ivec2 winTexel = metadata.selectedTexel;
+            uint numValidNeighbors = metadata.numValidNeighbors;
+            float mc = metadata.mc;
+            float spatialWSum = metadata.spatialWSum;
 
             float rcAvgWY = max(temporalReservoir.avgWY, 0.0);
             float canonicalWi = centerSampleData.sampleValue.w * rcAvgWY * mc;
