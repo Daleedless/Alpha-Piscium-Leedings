@@ -144,6 +144,8 @@ void main() {
     barrier();
 
     if (all(lessThan(texelPos, uval_mainImageSizeI))) {
+        PairwiseMISMetadata meta = pairwiseMISMetadata_init(texelPos);
+        transient_restir_pairwiseMISMetadata_store(texelPos, pairwiseMISMetadata_pack(meta));
         ReSTIRReservoir temporalReservoir = restir_initReservoir();
         float viewZ = hiz_groupGroundCheckSubgroupLoadViewZ(swizzledWGPos.xy, 4, texelPos);
         if (viewZ > -65536.0) {
@@ -161,7 +163,7 @@ void main() {
             float ageResetRand = rand_stbnVec1(rand_newStbnPos(texelPos, RANDOM_FRAME / 64u + 1u), RANDOM_FRAME);
             if (reprojInfo.historyResetFactor > ageResetRand) {
                 vec3 centerNormal = normalize(transient_viewNormal_fetch(texelPos).xyz * 2.0 - 1.0);
-                ResampleMaterial material = resampleMaterial_fetch(texelPos);
+                ResampleMaterial material = resampleMaterial_unpack(transient_restir_resampleMaterial_fetch(texelPos));
 
                 uint baseRandSeed = RANDOM_FRAME / 64u + 2u;
                 vec2 curr2PrevTexelPos = reprojInfo.curr2PrevScreenPos * uval_mainImageSize;
@@ -289,6 +291,7 @@ void main() {
                 #endif
             }
         }
+        transient_restir_spatialReservoirAccum_store(texelPos, vec4(temporalReservoir.m));
         uvec4 packedReservoir = restir_reservoir_pack(temporalReservoir);
         if (bool(frameCounter & 1)) {
             history_restir_reservoirTemporal1_store(texelPos, packedReservoir);

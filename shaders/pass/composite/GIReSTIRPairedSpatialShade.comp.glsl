@@ -55,7 +55,7 @@ void main() {
             vec2 screenPos = coords_texelToUV(texelPos, uval_mainImageSizeRcp);
             vec3 viewPos = coords_toViewCoord(screenPos, viewZ, global_camProjInverse);
             vec3 V = normalize(-viewPos);
-            ResampleMaterial centerMaterial = resampleMaterial_fetch(texelPos);
+            ResampleMaterial centerMaterial = resampleMaterial_unpack(transient_restir_resampleMaterial_fetch(texelPos));
 
             uvec4 reprojectedData = bool(frameCounter & 1) ? history_restir_reservoirTemporal1_fetch(texelPos) : history_restir_reservoirTemporal2_fetch(texelPos);
             ReSTIRReservoir temporalReservoir = restir_reservoir_unpack(reprojectedData);

@@ -85,7 +85,7 @@ void main() {
             vec2 screenPos = coords_texelToUV(texelPos, uval_mainImageSizeRcp);
             vec3 viewPos = coords_toViewCoord(screenPos, viewZ, global_camProjInverse);
             vec3 V = normalize(-viewPos);
-            ResampleMaterial centerMaterial = resampleMaterial_fetch(texelPos);
+            ResampleMaterial centerMaterial = resampleMaterial_unpack(transient_restir_resampleMaterial_fetch(texelPos));
 
             uvec4 reprojectedData;
             if (bool(frameCounter & 1)) {
@@ -215,7 +215,7 @@ void main() {
                                 float cCosPhiA = -dot(cDirAtNbr, centerSampleData.hitNormal);
                                 if (cCosPhiA > 0.0) {
                                     float jacCn = clamp((RB2_canon * cCosPhiA) / (cHitDist2 * cosPhiB_canon), 0.0, 256.0);
-                                    ResampleMaterial neighborMaterial = resampleMaterial_fetch(sampleTexelPos);
+                                    ResampleMaterial neighborMaterial = resampleMaterial_unpack(transient_restir_resampleMaterial_fetch(sampleTexelPos));
                                     vec3 VNeighbor = -normalize(neighborViewPos);
                                     float piRcY = evalTargetFunction(originalSample.xyz, neighborData.normal, cDirAtNbr, VNeighbor, neighborMaterial) * jacCn;
                                     float MiPiRcY = neighborReservoir.m * piRcY;

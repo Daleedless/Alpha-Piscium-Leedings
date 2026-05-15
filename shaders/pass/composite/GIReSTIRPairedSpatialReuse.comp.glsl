@@ -87,70 +87,69 @@ void main() {
     bool validA = all(lessThan(ivec4(texelA, -1, -1), ivec4(uval_mainImageSizeI, texelA)));
     bool validB = all(lessThan(ivec4(texelB, -1, -1), ivec4(uval_mainImageSizeI, texelB)));
 
-    float accumMA = 0.0;
-    float accumMB = 0.0;
-
-    PairwiseMISMetadata metaA = pairwiseMISMetadata_init(texelA);
-    PairwiseMISMetadata metaB = pairwiseMISMetadata_init(texelB);
-    #if PASS_INDEX != 0
-    vec4 spatialReservoirAccumA = transient_restir_spatialReservoirAccum_fetch(texelA);
-    vec4 spatialReservoirAccumB = transient_restir_spatialReservoirAccum_fetch(texelB);
-    uvec4 pairwiseMISMetadataA = transient_restir_pairwiseMISMetadata_fetch(texelA);
-    uvec4 pairwiseMISMetadataB = transient_restir_pairwiseMISMetadata_fetch(texelB);
-    accumMA = spatialReservoirAccumA.x;
-    accumMB = spatialReservoirAccumB.x;
-    metaA = pairwiseMISMetadata_unpack(pairwiseMISMetadataA);
-    metaB = pairwiseMISMetadata_unpack(pairwiseMISMetadataB);
-    #endif
-
     if (validA && validB && texelA != texelB){
         float viewZA = texelFetch(usam_gbufferSolidViewZ, texelA, 0).x;
         float viewZB = texelFetch(usam_gbufferSolidViewZ, texelB, 0).x;
         if (viewZA > -65536.0 && viewZB > -65536.0) {
             uvec4 spatialSamplePackedDataA = transient_restir_spatialInput_fetch(texelA);
             uvec4 spatialSamplePackedDataB = transient_restir_spatialInput_fetch(texelB);
-            uvec4 repA;
-            uvec4 repB;
-            if (bool(frameCounter & 1)) {
-                repA = history_restir_reservoirTemporal1_fetch(texelA);
-                repB = history_restir_reservoirTemporal1_fetch(texelB);
-            } else {
-                repA = history_restir_reservoirTemporal2_fetch(texelA);
-                repB = history_restir_reservoirTemporal2_fetch(texelB);
-            }
 
             SpatialSampleData sampleA = spatialSampleData_unpack(spatialSamplePackedDataA);
             SpatialSampleData sampleB = spatialSampleData_unpack(spatialSamplePackedDataB);
 
-            ReSTIRReservoir canonResA = restir_reservoir_unpack(repA);
-            ReSTIRReservoir canonResB = restir_reservoir_unpack(repB);
-
-            #if PASS_INDEX == 0
-            accumMA = canonResA.m;
-            accumMB = canonResB.m;
-            #endif
-
             if (dot(sampleA.geomNormal, sampleB.geomNormal) > 0.99) {
+                float accumMA = 0.0;
+                float accumMB = 0.0;
+
+                uvec4 repA;
+                uvec4 repB;
+                if (bool(frameCounter & 1)) {
+                    repA = history_restir_reservoirTemporal1_fetch(texelA);
+                    repB = history_restir_reservoirTemporal1_fetch(texelB);
+                } else {
+                    repA = history_restir_reservoirTemporal2_fetch(texelA);
+                    repB = history_restir_reservoirTemporal2_fetch(texelB);
+                }
+
+                ReSTIRReservoir canonResA = restir_reservoir_unpack(repA);
+                ReSTIRReservoir canonResB = restir_reservoir_unpack(repB);
+                PairwiseMISMetadata metaA = pairwiseMISMetadata_init(texelA);
+                PairwiseMISMetadata metaB = pairwiseMISMetadata_init(texelB);
+
+                #if PASS_INDEX == 0
+                accumMA = canonResA.m;
+                accumMB = canonResB.m;
+                #else
+                vec4 spatialReservoirAccumA = transient_restir_spatialReservoirAccum_fetch(texelA);
+                vec4 spatialReservoirAccumB = transient_restir_spatialReservoirAccum_fetch(texelB);
+                uvec4 pairwiseMISMetadataA = transient_restir_pairwiseMISMetadata_fetch(texelA);
+                uvec4 pairwiseMISMetadataB = transient_restir_pairwiseMISMetadata_fetch(texelB);
+                accumMA = spatialReservoirAccumA.x;
+                accumMB = spatialReservoirAccumB.x;
+                metaA = pairwiseMISMetadata_unpack(pairwiseMISMetadataA);
+                metaB = pairwiseMISMetadata_unpack(pairwiseMISMetadataB);
+                #endif
+
                 vec2 screenPosA = coords_texelToUV(texelA, uval_mainImageSizeRcp);
                 vec3 viewPosA = coords_toViewCoord(screenPosA, viewZA, global_camProjInverse);
                 vec2 screenPosB = coords_texelToUV(texelB, uval_mainImageSizeRcp);
                 vec3 viewPosB = coords_toViewCoord(screenPosB, viewZB, global_camProjInverse);
-                
-                ResampleMaterial matA = resampleMaterial_fetch(texelA);
+
+                ResampleMaterial matA = resampleMaterial_unpack(transient_restir_resampleMaterial_fetch(texelA));
                 ShiftMapping shiftBtoA = evaluateShiftMapping(canonResB, matA, sampleA, sampleB, viewPosA, viewPosB);
 
-                ResampleMaterial matB = resampleMaterial_fetch(texelB);
+                ResampleMaterial matB = resampleMaterial_unpack(transient_restir_resampleMaterial_fetch(texelB));
                 ShiftMapping shiftAtoB = evaluateShiftMapping(canonResA, matB, sampleB, sampleA, viewPosB, viewPosA);
 
                 applyShiftMapping(texelA, texelB, accumMA, canonResA, canonResB, metaA, sampleA, sampleB, shiftBtoA, shiftAtoB);
                 applyShiftMapping(texelB, texelA, accumMB, canonResB, canonResA, metaB, sampleB, sampleA, shiftAtoB, shiftBtoA);
+
+                transient_restir_pairwiseMISMetadata_store(texelA, pairwiseMISMetadata_pack(metaA));
+                transient_restir_pairwiseMISMetadata_store(texelB, pairwiseMISMetadata_pack(metaB));
+
+                transient_restir_spatialReservoirAccum_store(texelA, vec4(accumMA));
+                transient_restir_spatialReservoirAccum_store(texelB, vec4(accumMB));
             }
         }
     }
-
-    transient_restir_pairwiseMISMetadata_store(texelA, pairwiseMISMetadata_pack(metaA));
-    transient_restir_pairwiseMISMetadata_store(texelB, pairwiseMISMetadata_pack(metaB));
-
-    transient_restir_spatialReservoirAccum_store(texelA, vec4(accumMA));
-    transient_restir_spatialReservoirAccum_store(texelB, vec4(accumMB));
 }
