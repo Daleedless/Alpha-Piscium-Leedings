@@ -859,7 +859,7 @@ options(File("shaders.properties"), File("../shaders"), "base/Options.glsl", "ba
                         comment = "重用来自附近像素的GI样本以提高性能。"
                     }
                 }
-                slider("SETTING_GI_SPATIAL_REUSE_COUNT", 6, 1..16) {
+                slider("SETTING_GI_SPATIAL_REUSE_COUNT", 6, 1..8) {
                     Profile.Low preset 4
                     Profile.Medium preset 5
                     Profile.High preset 6
