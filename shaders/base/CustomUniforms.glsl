@@ -31,6 +31,10 @@ uniform vec3 uval_cameraDelta;
 uniform vec2 uval_taaJitter;
 uniform vec2 uval_prevTaaJitter;
 uniform vec2 uval_taaJitterUV;
+uniform vec2 uval_r2Frame;
+uniform int uval_restirSpatialTileOffsetX;
+uniform int uval_restirSpatialTileOffsety;
 #endif
 
+ivec2 uval_restirSpatialTileOffset = ivec2(uval_restirSpatialTileOffsetX, uval_restirSpatialTileOffsety);
 ivec2 uval_mainImageSizeI = ivec2(uval_mainImageSizeIX, uval_mainImageSizeIY);

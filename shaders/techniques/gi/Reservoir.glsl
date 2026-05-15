@@ -21,6 +21,15 @@
 #include "/util/Material.glsl"
 #include "/util/BSDF.glsl"
 #include "/techniques/gi/Common.glsl"
+#include "/techniques/gi/ResampleMaterial.glsl"
+
+#define RESTIR_REUSE_TEX_WIDTH 256
+#define RESTIR_REUSE_TEX_HEIGHT 128
+#define RESTIR_REUSE_TEX_SIZE ivec2(RESTIR_REUSE_TEX_WIDTH, RESTIR_REUSE_TEX_HEIGHT)
+#define RESTIR_REUSE_TILE_SIZE RESTIR_REUSE_TEX_WIDTH
+#define RESTIR_REUSE_TILE_SIZE_HALF RESTIR_REUSE_TEX_HEIGHT
+#define RESTIR_REUSE_TILE_BITS 8
+#define RESTIR_REUSE_TILE_MASK 255
 
 struct SpatialSampleData {
     vec3 geomNormal;
@@ -103,23 +112,83 @@ uvec4 restir_reservoir_pack(ReSTIRReservoir reservoir) {
     return packedData;
 }
 
-// Evaluate combined diffuse + specular BRDF then calculate the target function (pHat)
-float evalTargetFunction(vec3 irradiance, vec3 normal, vec3 lightDir, vec3 viewDir, Material material) {
-    float NdotL = saturate(dot(normal, lightDir));
+float evalTargetFunction(vec3 irradiance, vec3 normal, vec3 lightDir, vec3 viewDir, ResampleMaterial material) {
+    // Assumes rawNdotL is the un-clamped dot product. Ensure no pre-saturation occurred if passed from an external scope.
+    float rawNdotL = dot(normal, lightDir);
     float result = 0.0;
-    if (NdotL > 0.0) {
-        vec3 H = normalize(lightDir + viewDir);
-        float NdotV = saturate(dot(normal, viewDir));
-        float NdotH = saturate(dot(normal, H));
-        float LdotH = saturate(dot(lightDir, H));
 
-        float fresnel = fresnel_adobe(LdotH, material.f0, material.f82Tint);
-        float diffuseBRDF = material.dielectric * NdotL * RCP_PI;
-        float specularBRDF = bsdf_ggx(material, NdotL, NdotV, NdotH);
+    if (rawNdotL > 0.0) {
+        float rawNdotV = dot(normal, viewDir);
+        float LdotV    = dot(lightDir, viewDir);
 
-        float brdf = mix(diffuseBRDF, specularBRDF, fresnel);
-        vec3 radiance = irradiance * brdf;
+        // Compute inverse length of ||L+V||. The 1e-5 bias prevents rsqrt(0) NaN generation when L and V are perfectly opposed (LdotV = -1.0).
+        float invLen = inversesqrt(max(2.0 + 2.0 * LdotV, 1e-5));
+
+        // Pure scalar expansion. Replaces explicit vec3 H = normalize(...) and subsequent vector dot products.
+        float NdotV = saturate(rawNdotV);
+        float NdotH = saturate((rawNdotL + rawNdotV) * invLen);
+
+        // LdotH is mathematically bounded to [0, 1] (max angle between L and V is 180 deg, bounding half-angle to 90 deg). saturate() omitted.
+        float LdotH = (1.0 + LdotV) * invLen;
+
+        ResampleBRDF brdf = resampleMaterial_evalBRDF(material, rawNdotL, NdotV, NdotH, LdotH);
+        vec3 radiance = irradiance * brdf.full;
         result = length(radiance);
     }
     return result;
+}
+
+struct ShiftMapping {
+    vec4 Y;
+    float targetPHat;
+    float reusableTargetPHat;
+};
+
+ShiftMapping shiftMapping_init() {
+    ShiftMapping mapping;
+    mapping.Y = vec4(0.0, 0.0, 0.0, -1.0);
+    mapping.targetPHat = 0.0;
+    mapping.reusableTargetPHat = 0.0;
+    return mapping;
+}
+
+bool shiftMapping_hasTarget(ShiftMapping mapping) {
+    return mapping.targetPHat > 0.0;
+}
+
+bool shiftMapping_isReusable(ShiftMapping mapping) {
+    return mapping.reusableTargetPHat > 0.0;
+}
+
+ShiftMapping evaluateShiftMapping(
+ReSTIRReservoir canonResSRC,
+ResampleMaterial matDST,
+SpatialSampleData sampleDST, SpatialSampleData sampleSRC,
+vec3 viewPosDST, vec3 viewPosSRC
+) {
+    ShiftMapping mapping = shiftMapping_init();
+
+    vec3 hitViewPosSRC = viewPosSRC + canonResSRC.Y.xyz * canonResSRC.Y.w;
+    vec3 diffSRCtoDST = hitViewPosSRC - viewPosDST;
+    float dist2 = dot(diffSRCtoDST, diffSRCtoDST);
+    if (dist2 > 1e-6 && canonResSRC.Y.w > 1e-6 && restir_isReservoirValid(canonResSRC)) {
+        vec3 dirSRCtoDST = diffSRCtoDST * inversesqrt(dist2);
+        float cosSRC = dot(sampleSRC.normal, canonResSRC.Y.xyz);
+        float cosPhiSRC = -dot(canonResSRC.Y.xyz, sampleSRC.hitNormal);
+        float cosPhiDST = -dot(dirSRCtoDST, sampleSRC.hitNormal);
+        if (cosPhiSRC > 0.0 && cosPhiDST > 0.0) {
+            vec3 VDST = normalize(-viewPosDST);
+            float pHat = evalTargetFunction(sampleSRC.sampleValue.xyz, sampleDST.normal, dirSRCtoDST, VDST, matDST);
+            if (pHat > 0.0) {
+                float jacobian_DST = clamp(((canonResSRC.Y.w * canonResSRC.Y.w) * cosPhiDST) / (dist2 * cosPhiSRC), 0.0, 256.0);
+                mapping.Y = vec4(dirSRCtoDST, sqrt(dist2));
+                mapping.targetPHat = pHat * jacobian_DST;
+                if (cosSRC > 0.0) {
+                    mapping.reusableTargetPHat = mapping.targetPHat;
+                }
+            }
+        }
+    }
+
+    return mapping;
 }
