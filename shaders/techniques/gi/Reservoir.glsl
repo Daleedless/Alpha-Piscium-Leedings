@@ -23,6 +23,14 @@
 #include "/techniques/gi/Common.glsl"
 #include "/techniques/gi/ResampleMaterial.glsl"
 
+#define RESTIR_REUSE_TEX_WIDTH 256
+#define RESTIR_REUSE_TEX_HEIGHT 128
+#define RESTIR_REUSE_TEX_SIZE ivec2(RESTIR_REUSE_TEX_WIDTH, RESTIR_REUSE_TEX_HEIGHT)
+#define RESTIR_REUSE_TILE_SIZE RESTIR_REUSE_TEX_WIDTH
+#define RESTIR_REUSE_TILE_SIZE_HALF RESTIR_REUSE_TEX_HEIGHT
+#define RESTIR_REUSE_TILE_BITS 8
+#define RESTIR_REUSE_TILE_MASK 255
+
 struct SpatialSampleData {
     vec3 geomNormal;
     vec3 normal;

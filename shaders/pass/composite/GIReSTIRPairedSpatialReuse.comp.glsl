@@ -74,14 +74,14 @@ ShiftMapping srcToDst, ShiftMapping dstToSrc
 }
 
 void main() {
-    ivec2 localFetchPos = ivec2(gl_GlobalInvocationID.xy) % ivec2(256, 128);
-    ivec2 tileId = ivec2(gl_GlobalInvocationID.xy) / ivec2(256, 128);
-    ivec2 tileOrigin = tileId * ivec2(256, 256);
+    ivec2 localFetchPos = ivec2(gl_GlobalInvocationID.xy) & RESTIR_REUSE_TILE_MASK;
+    ivec2 tileId = ivec2(gl_GlobalInvocationID.xy) >> RESTIR_REUSE_TILE_BITS;
+    ivec2 tileOrigin = tileId * RESTIR_REUSE_TILE_SIZE;
     uvec4 pairData = texelFetch(REUSETEX, localFetchPos, 0);
     ivec2 localA = ivec2(pairData.xy);
     ivec2 localB = ivec2(pairData.zw);
     ivec2 localD = localB - localA;
-    localD = ((localD + 128) & 255) - 128;
+    localD = ((localD + RESTIR_REUSE_TILE_SIZE_HALF) & RESTIR_REUSE_TILE_MASK) - RESTIR_REUSE_TILE_SIZE_HALF;
     localB = localA + localD;
     localA = (localA + uval_restirSpatialTileOffset);
     localB = (localB + uval_restirSpatialTileOffset);
