@@ -327,6 +327,7 @@ void main() {
                 kernelRadius *= specAccumFactor;
                 kernelRadius += filteredInputVariance.y * baseKernelRadius.y;
                 kernelRadius *= hitDistFactor.y;
+                kernelRadius *= pow(centerGeomData.roughness, 0.25 * historyData5.z);
                 kernelRadius = clamp(kernelRadius, baseKernelRadius.z, baseKernelRadius.w);
                 float worldRadius = kernelRadius * abs(centerGeomData.viewPos.z) * uval_mainImageSizeRcp.y;
                 vec3 specTFP32, specBFP32;
@@ -346,7 +347,7 @@ void main() {
                 float sigmaFP32 = 0.69;
                 sigmaFP32 += 8.0 - hitDistFactor.y * 8.0;
                 sigmaFP32 *= 1.0 - filteredInputVariance.y;
-                sigmaFP32 += 0.025 * rcp(max(centerGeomData.roughness, 0.005));
+                sigmaFP32 += 0.025 * pow(centerGeomData.roughness, -historyData5.z);
                 float16_t sigma = float16_t(-sigmaFP32);
 
                 vec4 centerSpec = _gi_readSpec(texelPos);

@@ -1,6 +1,7 @@
 #include "Common.glsl"
 #include "/util/GBufferData.glsl"
 #include "/util/Material.glsl"
+#include "/util/Fresnel.glsl"
 #include "/util/Sampling.glsl"
 #include "/util/Rand.glsl"
 #include "/util/Dither.glsl"
@@ -444,6 +445,29 @@ void gi_reproject(ivec2 texelPos, float currViewZ) {
                 float weightSum = dot(finalWeights, vec4(1.0));
                 float rcpWeightSum = safeRcp(weightSum);
                 finalWeights *= rcpWeightSum;
+
+                if (weightSum > 0.0) {
+                    float pSpec = 1.0;
+                    if (material.dielectric > 0.0) {
+                        float NdotV = saturate(dot(currViewNormal, viewDir));
+                        vec3 fresnelV = saturate(fresnel_evalMaterial(material, NdotV));
+                        vec3 fresnelT = vec3(1.0) - fresnelV;
+                        vec3 totalEnergy = material.albedo * fresnelT + fresnelV;
+                        pSpec = colors2_colorspaces_luma(COLORS2_WORKING_COLORSPACE, fresnelV * safeRcp(totalEnergy));
+                        // Clamping this to avoid dead locks that causes fireflies
+                        pSpec = clamp(pSpec, 0.01, 0.99);
+                    }
+
+                    float choiceRand = rand_stbnVec1(rand_newStbnPos(texelPos, RANDOM_FRAME / 64u + 114u), RANDOM_FRAME);
+                    if (choiceRand < pSpec) {
+                        ReprojectInfo reprojInfo = reprojectInfo_unpack(transient_gi_diffuse_reprojInfo_load(texelPos));
+                        // Most edge values are very close to 1.0
+                        // And we also want stricter weights for ReSTIR temporal
+                        reprojInfo.bilateralWeights = pow(edgeWeights, vec4(16.0));
+                        reprojInfo.curr2PrevScreenPos = virtualPrevScreen;
+                        transient_gi_diffuse_reprojInfo_store(texelPos, reprojectInfo_pack(reprojInfo));
+                    }
+                }
 
                 float ditherNoiseV = rand_stbnVec1(rand_newStbnPos(texelPos, 9u), frameCounter);
 
