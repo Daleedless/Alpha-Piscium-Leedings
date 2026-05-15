@@ -1,5 +1,3 @@
-import java.awt.image.BufferedImage
-import javax.imageio.ImageIO
 import kotlin.io.path.Path
 import kotlin.random.Random
 
@@ -69,9 +67,30 @@ fun main(baseSeed: Long): List<List<Int>> {
         return (res or (res shr 31)).toInt()
     }
 
-    pairPos.sortBy { minOf(encodeMorton(it[1], it[2]), encodeMorton(it[3], it[4])) }
+    val temp = pairPos.map { it.slice(1..<5) }
+    val lookup = temp.asSequence()
+        .withIndex()
+        .flatMap { (i, pair) ->
+            pair.chunked(2).map { (it[0] to it[1]) to i }
+        }
+        .toMap(mutableMapOf())
 
-    return pairPos.map { it.slice(1..<5) }
+    val final = mutableListOf<List<Int>>()
+    for (y in 0..<size) {
+        for (x in 0..<size) {
+            val myPair = x to y
+            lookup.remove(myPair)?.let { pairId ->
+                val element = temp[pairId]
+                var otherPair = element[0] to element[1]
+                if (otherPair == myPair) {
+                    otherPair = element[2] to element[3]
+                }
+                lookup.remove(otherPair)
+                final.add(listOf(myPair.first, myPair.second, otherPair.first, otherPair.second))
+            }
+        }
+    }
+    return final
 }
 
 val baseRandom = Random(1145141919810L)
