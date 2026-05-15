@@ -9,7 +9,6 @@
 
 layout(local_size_x = 256) in;
 
-layout(r32f) uniform restrict image2D uimg_r32f;
 layout(rgba32ui) uniform restrict uimage2D uimg_rgba32ui;
 
 /*const*/
@@ -45,8 +44,9 @@ SpatialSampleData sampleDST, SpatialSampleData sampleSRC,
 ShiftMapping srcToDst, ShiftMapping dstToSrc
 ) {
     if (shiftMapping_isReusable(srcToDst)) {
-        float accumMDST = transient_restir_spatialReservoirAccum_fetch(texelDST).x;
         uvec4 pairwiseMISMetadataDST = transient_restir_pairwiseMISMetadata_fetch(texelDST);
+        PairwiseMISMetadata metaDST = pairwiseMISMetadata_unpack(pairwiseMISMetadataDST);
+        float accumMDST = metaDST.accumM;
 
         float rcMDivK_DST = canonResDST.m / 8.0;
         float MiPiRiY = canonResSRC.m * sampleSRC.sampleValue.w;
@@ -58,7 +58,6 @@ ShiftMapping srcToDst, ShiftMapping dstToSrc
             mcIncrement_DST = 1.0 - MiPiRcY * safeRcp(MiPiRcY + rcMDivK_DST * sampleDST.sampleValue.w);
         }
 
-        PairwiseMISMetadata metaDST = pairwiseMISMetadata_unpack(pairwiseMISMetadataDST);
         metaDST.mc += mcIncrement_DST;
         metaDST.numValidNeighbors += 1u;
 
@@ -68,8 +67,8 @@ ShiftMapping srcToDst, ShiftMapping dstToSrc
         if (restir_updateReservoirM(accumMDST, spatialWSumDST, neighborWi, canonResSRC.m, neighborRand)) {
             metaDST.selectedTexel = texelSRC;
         }
+        metaDST.accumM = accumMDST;
         metaDST.spatialWSum = spatialWSumDST;
-        transient_restir_spatialReservoirAccum_store(texelDST, vec4(accumMDST));
         transient_restir_pairwiseMISMetadata_store(texelDST, pairwiseMISMetadata_pack(metaDST));
     }
 }

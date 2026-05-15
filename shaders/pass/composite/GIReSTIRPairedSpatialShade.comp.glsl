@@ -68,7 +68,7 @@ void main() {
             float spatialWSum = metadata.spatialWSum;
             ReSTIRReservoir spatialReservoir = restir_initReservoir();
             spatialReservoir.Y = temporalReservoir.Y;
-            spatialReservoir.m = transient_restir_spatialReservoirAccum_fetch(texelPos).x;
+            spatialReservoir.m = metadata.accumM;
 
             vec4 selectedSampleF = centerSampleData.sampleValue;
             if (winTexel != texelPos) {

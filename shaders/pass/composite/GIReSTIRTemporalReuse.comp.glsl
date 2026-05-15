@@ -290,8 +290,8 @@ void main() {
             }
         }
         PairwiseMISMetadata meta = pairwiseMISMetadata_init(texelPos);
+        meta.accumM = temporalReservoir.m;
         transient_restir_pairwiseMISMetadata_store(texelPos, pairwiseMISMetadata_pack(meta));
-        transient_restir_spatialReservoirAccum_store(texelPos, vec4(temporalReservoir.m));
         uvec4 packedReservoir = restir_reservoir_pack(temporalReservoir);
         if (bool(frameCounter & 1)) {
             history_restir_reservoirTemporal1_store(texelPos, packedReservoir);
