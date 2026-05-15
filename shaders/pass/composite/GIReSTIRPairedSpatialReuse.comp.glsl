@@ -113,7 +113,7 @@ ShiftMapping srcToDst, ShiftMapping dstToSrc
         float spatialWSumDST = uintBitsToFloat(metaDST.w);
         float neighborRand = rand_stbnVec1(rand_newStbnPos(texelDST, RANDOM_FRAME / 64u + 4u + PASS_INDEX), RANDOM_FRAME);
         if (restir_updateReservoir(accumResDST, spatialWSumDST, srcToDst.Y, neighborWi, canonResSRC.m, neighborRand)) {
-            metaDST.x = (uint(texelSRC.y) << 16) | uint(texelSRC.x);
+            metaDST.x = packUInt2x16(uvec2(texelSRC));
         }
         metaDST.w = floatBitsToUint(spatialWSumDST);
     }
@@ -142,8 +142,8 @@ void main() {
     uvec4 metaA = uvec4(0);
     uvec4 metaB = uvec4(0);
     #if PASS_INDEX == 0
-    metaA = uvec4((uint(texelA.y) << 16) | uint(texelA.x), 0u, floatBitsToUint(1.0), 0u);
-    metaB = uvec4((uint(texelB.y) << 16) | uint(texelB.x), 0u, floatBitsToUint(1.0), 0u);
+    metaA = uvec4(packUInt2x16(uvec2(texelA)), 0u, floatBitsToUint(1.0), 0u);
+    metaB = uvec4(packUInt2x16(uvec2(texelB)), 0u, floatBitsToUint(1.0), 0u);
     #else
     accumResA = restir_reservoir_unpack(transient_restir_spatialReservoirAccum_load(texelA));
     accumResB = restir_reservoir_unpack(transient_restir_spatialReservoirAccum_load(texelB));

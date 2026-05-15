@@ -62,7 +62,7 @@ void main() {
             ReSTIRReservoir spatialReservoir = restir_reservoir_unpack(transient_restir_spatialReservoirAccum_fetch(texelPos));
             uvec4 meta = transient_restir_pairwiseMISMetadata_fetch(texelPos);
 
-            ivec2 winTexel = ivec2(meta.x & 0xFFFFu, meta.x >> 16u);
+            ivec2 winTexel = ivec2(unpackUInt2x16(meta.x));
             uint numValidNeighbors = meta.y;
             float mc = uintBitsToFloat(meta.z);
             float spatialWSum = uintBitsToFloat(meta.w);
