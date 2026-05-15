@@ -3,7 +3,7 @@
 #include "/Base.glsl"
 
 #define GI_DENOISE_PASS 1
-#define GI_DENOISE_SAMPLES 0
+#define GI_DENOISE_SAMPLES SETTING_DENOISER_SPATIAL_SAMPLES
 // X: history length radius scale
 // Y: variance heuristic radius scale
 // Z: min radius
