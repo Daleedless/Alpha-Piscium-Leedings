@@ -31,15 +31,36 @@ layout(rgba32ui) uniform restrict uimage2D uimg_rgba32ui;
 #endif
 /*const*/
 
-void evaluateShift(
-    ivec2 texelDST, ivec2 texelSRC,
-    inout ReSTIRReservoir accumResDST,
-    ReSTIRReservoir canonResDST, ReSTIRReservoir canonResSRC,
-    inout uvec4 metaDST,
-    Material matDST, Material matSRC,
+struct ShiftMapping {
+    vec4 Y;
+    float targetPHat;
+    float reusableTargetPHat;
+};
+
+ShiftMapping shiftMapping_init() {
+    ShiftMapping mapping;
+    mapping.Y = vec4(0.0, 0.0, 0.0, -1.0);
+    mapping.targetPHat = 0.0;
+    mapping.reusableTargetPHat = 0.0;
+    return mapping;
+}
+
+bool shiftMapping_hasTarget(ShiftMapping mapping) {
+    return mapping.targetPHat > 0.0;
+}
+
+bool shiftMapping_isReusable(ShiftMapping mapping) {
+    return mapping.reusableTargetPHat > 0.0;
+}
+
+ShiftMapping evaluateShiftMapping(
+    ReSTIRReservoir canonResSRC,
+    Material matDST,
     SpatialSampleData sampleDST, SpatialSampleData sampleSRC,
     vec3 viewPosDST, vec3 viewPosSRC
 ) {
+    ShiftMapping mapping = shiftMapping_init();
+
     vec3 hitViewPosSRC = viewPosSRC + canonResSRC.Y.xyz * canonResSRC.Y.w;
     vec3 diffSRCtoDST = hitViewPosSRC - viewPosDST;
     float dist2 = dot(diffSRCtoDST, diffSRCtoDST);
@@ -48,46 +69,53 @@ void evaluateShift(
         float cosSRC = dot(sampleSRC.normal, canonResSRC.Y.xyz);
         float cosPhiSRC = -dot(canonResSRC.Y.xyz, sampleSRC.hitNormal);
         float cosPhiDST = -dot(dirSRCtoDST, sampleSRC.hitNormal);
-        if (cosSRC > 0.0 && cosPhiSRC > 0.0 && cosPhiDST > 0.0) {
+        if (cosPhiSRC > 0.0 && cosPhiDST > 0.0) {
             vec3 VDST = normalize(-viewPosDST);
             float pHat = evalTargetFunction(sampleSRC.sampleValue.xyz, sampleDST.normal, dirSRCtoDST, VDST, matDST);
             if (pHat > 0.0) {
                 float jacobian_DST = clamp(((canonResSRC.Y.w * canonResSRC.Y.w) * cosPhiDST) / (dist2 * cosPhiSRC), 0.0, 256.0);
-                float pcRiY_DST = pHat * jacobian_DST;
-                float rcMDivK_DST = canonResDST.m / 8.0;
-                float MiPiRiY = canonResSRC.m * sampleSRC.sampleValue.w;
-                float mi_DST = MiPiRiY * safeRcp(MiPiRiY + rcMDivK_DST * pcRiY_DST);
-
-                float mcIncrement_DST = 1.0;
-                vec3 diffDSTtoSRC = (viewPosDST + canonResDST.Y.xyz * canonResDST.Y.w) - viewPosSRC;
-                float dist2DSTtoSRC = dot(diffDSTtoSRC, diffDSTtoSRC);
-                float cosPhiSRC_canon = -dot(canonResDST.Y.xyz, sampleDST.hitNormal);
-                float RB2_canon = canonResDST.Y.w * canonResDST.Y.w;
-                if (dist2DSTtoSRC > 1e-6 && RB2_canon >= 1e-6 && cosPhiSRC_canon > 0.0) {
-                    vec3 cDirAtNbr = diffDSTtoSRC * inversesqrt(dist2DSTtoSRC);
-                    float cCosPhiDST = -dot(cDirAtNbr, sampleDST.hitNormal);
-                    if (cCosPhiDST > 0.0) {
-                        float jacCn = clamp((RB2_canon * cCosPhiDST) / (dist2DSTtoSRC * cosPhiSRC_canon), 0.0, 256.0);
-                        vec3 VSRC = normalize(-viewPosSRC);
-                        float piRcY_SRC = evalTargetFunction(sampleDST.sampleValue.xyz, sampleSRC.normal, cDirAtNbr, VSRC, matSRC) * jacCn;
-                        float MiPiRcY = canonResSRC.m * piRcY_SRC;
-                        mcIncrement_DST = 1.0 - MiPiRcY * safeRcp(MiPiRcY + rcMDivK_DST * sampleDST.sampleValue.w);
-                    }
+                mapping.Y = vec4(dirSRCtoDST, sqrt(dist2));
+                mapping.targetPHat = pHat * jacobian_DST;
+                if (cosSRC > 0.0) {
+                    mapping.reusableTargetPHat = mapping.targetPHat;
                 }
-
-                float mc_DST = uintBitsToFloat(metaDST.z) + mcIncrement_DST;
-                metaDST.z = floatBitsToUint(mc_DST);
-                metaDST.y += 1u;
-                float neighborWi = pcRiY_DST * max(canonResSRC.avgWY, 0.0) * mi_DST;
-                float spatialWSumDST = uintBitsToFloat(metaDST.w);
-                float neighborRand = rand_stbnVec1(rand_newStbnPos(texelDST, RANDOM_FRAME / 64u + 4u + PASS_INDEX), RANDOM_FRAME);
-                vec4 newY = vec4(dirSRCtoDST, sqrt(dist2));
-                if (restir_updateReservoir(accumResDST, spatialWSumDST, newY, neighborWi, canonResSRC.m, neighborRand)) {
-                    metaDST.x = (uint(texelSRC.y) << 16) | uint(texelSRC.x);
-                }
-                metaDST.w = floatBitsToUint(spatialWSumDST);
             }
         }
+    }
+
+    return mapping;
+}
+
+void applyShiftMapping(
+    ivec2 texelDST, ivec2 texelSRC,
+    inout ReSTIRReservoir accumResDST,
+    ReSTIRReservoir canonResDST, ReSTIRReservoir canonResSRC,
+    inout uvec4 metaDST,
+    SpatialSampleData sampleDST, SpatialSampleData sampleSRC,
+    ShiftMapping srcToDst, ShiftMapping dstToSrc
+) {
+    if (shiftMapping_isReusable(srcToDst)) {
+        float rcMDivK_DST = canonResDST.m / 8.0;
+        float MiPiRiY = canonResSRC.m * sampleSRC.sampleValue.w;
+        float mi_DST = MiPiRiY * safeRcp(MiPiRiY + rcMDivK_DST * srcToDst.reusableTargetPHat);
+
+        float mcIncrement_DST = 1.0;
+        if (shiftMapping_hasTarget(dstToSrc)) {
+            float MiPiRcY = canonResSRC.m * dstToSrc.targetPHat;
+            mcIncrement_DST = 1.0 - MiPiRcY * safeRcp(MiPiRcY + rcMDivK_DST * sampleDST.sampleValue.w);
+        }
+
+        float mc_DST = uintBitsToFloat(metaDST.z) + mcIncrement_DST;
+        metaDST.z = floatBitsToUint(mc_DST);
+        metaDST.y += 1u;
+
+        float neighborWi = srcToDst.reusableTargetPHat * max(canonResSRC.avgWY, 0.0) * mi_DST;
+        float spatialWSumDST = uintBitsToFloat(metaDST.w);
+        float neighborRand = rand_stbnVec1(rand_newStbnPos(texelDST, RANDOM_FRAME / 64u + 4u + PASS_INDEX), RANDOM_FRAME);
+        if (restir_updateReservoir(accumResDST, spatialWSumDST, srcToDst.Y, neighborWi, canonResSRC.m, neighborRand)) {
+            metaDST.x = (uint(texelSRC.y) << 16) | uint(texelSRC.x);
+        }
+        metaDST.w = floatBitsToUint(spatialWSumDST);
     }
 }
 
@@ -156,8 +184,10 @@ void main() {
     #endif
 
     if (dot(sampleA.geomNormal, sampleB.geomNormal) > 0.99) {
-        evaluateShift(texelA, texelB, accumResA, canonResA, canonResB, metaA, matA, matB, sampleA, sampleB, viewPosA, viewPosB);
-        evaluateShift(texelB, texelA, accumResB, canonResB, canonResA, metaB, matB, matA, sampleB, sampleA, viewPosB, viewPosA);
+        ShiftMapping shiftAtoB = evaluateShiftMapping(canonResA, matB, sampleB, sampleA, viewPosB, viewPosA);
+        ShiftMapping shiftBtoA = evaluateShiftMapping(canonResB, matA, sampleA, sampleB, viewPosA, viewPosB);
+        applyShiftMapping(texelA, texelB, accumResA, canonResA, canonResB, metaA, sampleA, sampleB, shiftBtoA, shiftAtoB);
+        applyShiftMapping(texelB, texelA, accumResB, canonResB, canonResA, metaB, sampleB, sampleA, shiftAtoB, shiftBtoA);
     }
 
     transient_restir_spatialReservoirAccum_store(texelA, restir_reservoir_pack(accumResA));
