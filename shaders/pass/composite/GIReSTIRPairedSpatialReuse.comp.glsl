@@ -141,10 +141,14 @@ void main() {
     PairwiseMISMetadata metaA = pairwiseMISMetadata_init(texelA);
     PairwiseMISMetadata metaB = pairwiseMISMetadata_init(texelB);
     #if PASS_INDEX != 0
-    accumResA = restir_reservoir_unpack(transient_restir_spatialReservoirAccum_load(texelA));
-    accumResB = restir_reservoir_unpack(transient_restir_spatialReservoirAccum_load(texelB));
-    metaA = pairwiseMISMetadata_unpack(transient_restir_pairwiseMISMetadata_load(texelA));
-    metaB = pairwiseMISMetadata_unpack(transient_restir_pairwiseMISMetadata_load(texelB));
+    uvec4 spatialReservoirAccumA = transient_restir_spatialReservoirAccum_fetch(texelA);
+    uvec4 spatialReservoirAccumB = transient_restir_spatialReservoirAccum_fetch(texelB);
+    uvec4 pairwiseMISMetadataA = transient_restir_pairwiseMISMetadata_fetch(texelA);
+    uvec4 pairwiseMISMetadataB = transient_restir_pairwiseMISMetadata_fetch(texelB);
+    accumResA = restir_reservoir_unpack(spatialReservoirAccumA);
+    accumResB = restir_reservoir_unpack(spatialReservoirAccumB);
+    metaA = pairwiseMISMetadata_unpack(pairwiseMISMetadataA);
+    metaB = pairwiseMISMetadata_unpack(pairwiseMISMetadataB);
     #endif
 
     if (validA && validB && texelA != texelB){
