@@ -20,6 +20,7 @@
 #include "/techniques/HiZCheck.glsl"
 #include "/techniques/SST2.glsl"
 #include "/techniques/gi/InitialSample.glsl"
+#include "/techniques/gi/ResampleMaterial.glsl"
 #include "/util/GBufferData.glsl"
 #include "/util/Material.glsl"
 #include "/util/Morton.glsl"
@@ -74,6 +75,7 @@ void main() {
             gbufferData1_unpack(texelFetch(usam_gbufferSolidData1, texelPos, 0), gData);
             gbufferData2_unpack(texelFetch(usam_gbufferSolidData2, texelPos, 0), gData);
             Material material = material_decode(gData);
+            transient_restir_resampleMaterial_store(texelPos, resampleMaterial_pack(resampleMaterial_fromMaterial(material)));
             vec4 albedoAndEmissive = vec4(gData.albedo, gData.pbrSpecular.a);
             vec4 geomNormalData = vec4(gData.geomNormal * 0.5 + 0.5, 0.0);
             vec4 viewNormalData = vec4(gData.normal * 0.5 + 0.5, 0.0);
@@ -104,6 +106,7 @@ void main() {
         } else {
             transient_geomViewNormal_store(texelPos, vec4(0.0));
             transient_viewNormal_store(texelPos, vec4(0.0));
+            transient_restir_resampleMaterial_store(texelPos, vec4(0.0));
             transient_solidAlbedo_store(texelPos, vec4(0.0));
         }
     }

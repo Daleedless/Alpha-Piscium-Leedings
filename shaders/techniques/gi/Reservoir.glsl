@@ -21,6 +21,7 @@
 #include "/util/Material.glsl"
 #include "/util/BSDF.glsl"
 #include "/techniques/gi/Common.glsl"
+#include "/techniques/gi/ResampleMaterial.glsl"
 
 struct SpatialSampleData {
     vec3 geomNormal;
@@ -103,8 +104,7 @@ uvec4 restir_reservoir_pack(ReSTIRReservoir reservoir) {
     return packedData;
 }
 
-// Evaluate combined diffuse + specular BRDF then calculate the target function (pHat)
-float evalTargetFunction(vec3 irradiance, vec3 normal, vec3 lightDir, vec3 viewDir, Material material) {
+float evalTargetFunction(vec3 irradiance, vec3 normal, vec3 lightDir, vec3 viewDir, ResampleMaterial material) {
     // Assumes rawNdotL is the un-clamped dot product. Ensure no pre-saturation occurred if passed from an external scope.
     float rawNdotL = dot(normal, lightDir);
     float result = 0.0;
@@ -123,13 +123,8 @@ float evalTargetFunction(vec3 irradiance, vec3 normal, vec3 lightDir, vec3 viewD
         // LdotH is mathematically bounded to [0, 1] (max angle between L and V is 180 deg, bounding half-angle to 90 deg). saturate() omitted.
         float LdotH = (1.0 + LdotV) * invLen;
 
-        // Standard BRDF evaluation.
-        float fresnel = fresnel_schlick(LdotH, material.f0);
-        float diffuseBRDF = material.dielectric * rawNdotL * RCP_PI;
-        float specularBRDF = bsdf_ggx(material, rawNdotL, NdotV, NdotH);
-
-        float brdf = mix(diffuseBRDF, specularBRDF, fresnel);
-        vec3 radiance = irradiance * brdf;
+        ResampleBRDF brdf = resampleMaterial_evalBRDF(material, rawNdotL, NdotV, NdotH, LdotH);
+        vec3 radiance = irradiance * brdf.full;
         result = length(radiance);
     }
     return result;
@@ -159,7 +154,7 @@ bool shiftMapping_isReusable(ShiftMapping mapping) {
 
 ShiftMapping evaluateShiftMapping(
 ReSTIRReservoir canonResSRC,
-Material matDST,
+ResampleMaterial matDST,
 SpatialSampleData sampleDST, SpatialSampleData sampleSRC,
 vec3 viewPosDST, vec3 viewPosSRC
 ) {

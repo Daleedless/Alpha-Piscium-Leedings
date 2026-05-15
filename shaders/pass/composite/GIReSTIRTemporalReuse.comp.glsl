@@ -45,8 +45,8 @@ float combinedWeight,
 uint randSeedOffset,
 vec3 viewPos,
 vec3 V,
-GBufferData gData,
-Material material,
+vec3 centerNormal,
+ResampleMaterial material,
 bool oddFrame,
 inout ReSTIRReservoir reservoir,
 inout float wSum,
@@ -95,7 +95,7 @@ inout f16vec3 prevHitNormal
                     float cosPhiA = -dot(dirA, neighborHitNormal);
                     float cosPhiB = -dot(dirB, neighborHitNormal);
                     float jacobian = 1.0;
-                    if (cosPhiA <= 0.0 || dot(gData.normal, dirA) <= 0.0) {
+                    if (cosPhiA <= 0.0 || dot(centerNormal, dirA) <= 0.0) {
                         jacobian = 0.0;
                     } else if (cosPhiB > 5e-2) {
                         jacobian = min((RB2 * cosPhiA) / (hitDist2 * cosPhiB), 256.0);
@@ -108,7 +108,7 @@ inout f16vec3 prevHitNormal
 
             if (valid) {
                 vec4 neighborSample = history_restir_prevSample_fetch(neighborTexelPos);
-                float neighborPHat = evalTargetFunction(neighborSample.rgb, gData.normal, neighborReservoir.Y.xyz, V, material);
+                float neighborPHat = evalTargetFunction(neighborSample.rgb, centerNormal, neighborReservoir.Y.xyz, V, material);
 
                 neighborReservoir.m *= combinedWeight;
                 // Reduces weight further if the target function is much diff from the hisotry footprint
@@ -160,10 +160,8 @@ void main() {
             ReprojectInfo reprojInfo = reprojectInfo_unpack(reprojInfoData);
             float ageResetRand = rand_stbnVec1(rand_newStbnPos(texelPos, RANDOM_FRAME / 64u + 1u), RANDOM_FRAME);
             if (reprojInfo.historyResetFactor > ageResetRand) {
-                GBufferData gData = gbufferData_init();
-                gbufferData1_unpack(texelFetch(usam_gbufferSolidData1, texelPos, 0), gData);
-                gbufferData2_unpack(texelFetch(usam_gbufferSolidData2, texelPos, 0), gData);
-                Material material = material_decode(gData);
+                vec3 centerNormal = normalize(transient_viewNormal_fetch(texelPos).xyz * 2.0 - 1.0);
+                ResampleMaterial material = resampleMaterial_fetch(texelPos);
 
                 uint baseRandSeed = RANDOM_FRAME / 64u + 2u;
                 vec2 curr2PrevTexelPos = reprojInfo.curr2PrevScreenPos * uval_mainImageSize;
@@ -188,19 +186,19 @@ void main() {
                 //   w = bottom-left  iGatherTexelPos + (-1, -1)
                 {
                     float combinedWeight = bilinearWeights4.x * reprojInfo.bilateralWeights.x * reprojInfo.historyResetFactor;
-                    sampleTemporalNeighbor(texelPos, iGatherTexelPos + ivec2(-1, 0), combinedWeight, baseRandSeed + 1u, viewPos, V, gData, material, oddFrame, temporalReservoir, wSum, prevSample, prevHitNormal);
+                    sampleTemporalNeighbor(texelPos, iGatherTexelPos + ivec2(-1, 0), combinedWeight, baseRandSeed + 1u, viewPos, V, centerNormal, material, oddFrame, temporalReservoir, wSum, prevSample, prevHitNormal);
                 }
                 {
                     float combinedWeight = bilinearWeights4.y * reprojInfo.bilateralWeights.y * reprojInfo.historyResetFactor;
-                    sampleTemporalNeighbor(texelPos, iGatherTexelPos, combinedWeight, baseRandSeed + 2u, viewPos, V, gData, material, oddFrame, temporalReservoir, wSum, prevSample, prevHitNormal);
+                    sampleTemporalNeighbor(texelPos, iGatherTexelPos, combinedWeight, baseRandSeed + 2u, viewPos, V, centerNormal, material, oddFrame, temporalReservoir, wSum, prevSample, prevHitNormal);
                 }
                 {
                     float combinedWeight = bilinearWeights4.z * reprojInfo.bilateralWeights.z * reprojInfo.historyResetFactor;
-                    sampleTemporalNeighbor(texelPos, iGatherTexelPos + ivec2(0, -1), combinedWeight, baseRandSeed + 3u, viewPos, V, gData, material, oddFrame, temporalReservoir, wSum, prevSample, prevHitNormal);
+                    sampleTemporalNeighbor(texelPos, iGatherTexelPos + ivec2(0, -1), combinedWeight, baseRandSeed + 3u, viewPos, V, centerNormal, material, oddFrame, temporalReservoir, wSum, prevSample, prevHitNormal);
                 }
                 {
                     float combinedWeight = bilinearWeights4.w * reprojInfo.bilateralWeights.w * reprojInfo.historyResetFactor;
-                    sampleTemporalNeighbor(texelPos, iGatherTexelPos + ivec2(-1, -1), combinedWeight, baseRandSeed + 4u, viewPos, V, gData, material, oddFrame, temporalReservoir, wSum, prevSample, prevHitNormal);
+                    sampleTemporalNeighbor(texelPos, iGatherTexelPos + ivec2(-1, -1), combinedWeight, baseRandSeed + 4u, viewPos, V, centerNormal, material, oddFrame, temporalReservoir, wSum, prevSample, prevHitNormal);
                 }
             }
 
@@ -211,6 +209,7 @@ void main() {
                 gbufferData1_unpack(texelFetch(usam_gbufferSolidData1, texelPos, 0), gData);
                 gbufferData2_unpack(texelFetch(usam_gbufferSolidData2, texelPos, 0), gData);
                 Material material = material_decode(gData);
+                ResampleMaterial resampleMaterial = resampleMaterial_fromMaterial(material);
 
                 float hitDistance = transient_gi_initialSampleHitDistance_fetch(texelPos).x;
                 restir_InitialSampleData initialSample = restir_initalSample_restoreData(texelPos, viewZ, gData.geomNormal, gData.normal, material, hitDistance);
@@ -228,7 +227,7 @@ void main() {
                     transient_gi_initialSampleHitDistance_store(texelPos, vec4(-1.0));
                 }
 
-                float newPHat = evalTargetFunction(hitRadiance, gData.normal, sampleDirView, V, material);
+                float newPHat = evalTargetFunction(hitRadiance, gData.normal, sampleDirView, V, resampleMaterial);
 
                 float samplePdf = initialSample.pdf;
                 float newWi = newPHat * safeRcp(samplePdf);
@@ -272,21 +271,14 @@ void main() {
                 float winNDotH = saturate(dot(gData.normal, H_win));
                 float winLDotH = abs(dot(winL, H_win));
 
-                vec3 winFresnel = fresnel_evalMaterial(material, winLDotH);
-                float winDiffBRDF = winNDotL * RCP_PI;
-                float winSpecBRDF = bsdf_ggx(material, winNDotL, winNDotV, winNDotH);
+                ResampleBRDF winBRDF = resampleMaterial_evalBRDF(resampleMaterial, winNDotL, winNDotV, winNDotH, winLDotH);
+                float diffRatio = winBRDF.diffuse * safeRcp(winBRDF.full);
 
-                vec3 diffuseWeight = material.dielectric * (1.0 - winFresnel) * winDiffBRDF;
-                vec3 specularWeight = winFresnel * winSpecBRDF;
-                vec3 fullBRDF = diffuseWeight + specularWeight;
-                vec3 diffRatio3 = diffuseWeight * safeRcp(fullBRDF);
+                vec3 totalOutput = winR * winBRDF.full;
+                vec4 ssgiDiffOut = vec4(totalOutput * diffRatio, winHitDist);
 
-                vec3 totalOutput = winR * fullBRDF;
-                vec4 ssgiDiffOut = vec4(totalOutput * diffRatio3, winHitDist);
-
-                vec4 ssgiSpecOut = vec4(totalOutput * (vec3(1.0) - diffRatio3), winHitDist);
-                vec3 specBrdf = texture(usam_specBRDFLUT, vec2(winNDotV, material.roughness)).rgb;
-                vec3 specAlbedo = saturate(material.f0RGB * specBrdf.x + material.f82TintRGB * specBrdf.y + specBrdf.z);
+                vec4 ssgiSpecOut = vec4(totalOutput * (1.0 - diffRatio), winHitDist);
+                vec3 specAlbedo = resampleMaterial_specularAlbedo(resampleMaterial, winNDotV);
                 ssgiSpecOut.rgb *= safeRcp(specAlbedo);
 
                 ssgiDiffOut = clamp(ssgiDiffOut, 0.0, FP16_MAX);

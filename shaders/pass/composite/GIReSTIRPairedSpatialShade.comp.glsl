@@ -55,6 +55,7 @@ void main() {
             vec2 screenPos = coords_texelToUV(texelPos, uval_mainImageSizeRcp);
             vec3 viewPos = coords_toViewCoord(screenPos, viewZ, global_camProjInverse);
             vec3 V = normalize(-viewPos);
+            ResampleMaterial centerMaterial = resampleMaterial_fetch(texelPos);
 
             uvec4 reprojectedData = bool(frameCounter & 1) ? history_restir_reservoirTemporal1_fetch(texelPos) : history_restir_reservoirTemporal2_fetch(texelPos);
             ReSTIRReservoir temporalReservoir = restir_reservoir_unpack(reprojectedData);
@@ -79,12 +80,7 @@ void main() {
                 uvec4 winRep = bool(frameCounter & 1) ? history_restir_reservoirTemporal1_fetch(winTexel) : history_restir_reservoirTemporal2_fetch(winTexel);
                 ReSTIRReservoir winRes = restir_reservoir_unpack(winRep);
 
-                GBufferData gData = gbufferData_init();
-                gbufferData1_unpack(texelFetch(usam_gbufferSolidData1, texelPos, 0), gData);
-                gbufferData2_unpack(texelFetch(usam_gbufferSolidData2, texelPos, 0), gData);
-                Material material = material_decode(gData);
-
-                ShiftMapping winToCenter = evaluateShiftMapping(winRes, material, centerSampleData, winSample, viewPos, winViewPos);
+                ShiftMapping winToCenter = evaluateShiftMapping(winRes, centerMaterial, centerSampleData, winSample, viewPos, winViewPos);
                 spatialReservoir.Y = winToCenter.Y;
                 selectedSampleF = vec4(winSample.sampleValue.xyz, winToCenter.targetPHat);
             }
@@ -117,30 +113,18 @@ void main() {
             float winHitDist = resultReservoir.Y.w;
             vec3 H_out = normalize(winL_out + V);
 
-            GBufferData gData = gbufferData_init();
-            gbufferData1_unpack(texelFetch(usam_gbufferSolidData1, texelPos, 0), gData);
-            gbufferData2_unpack(texelFetch(usam_gbufferSolidData2, texelPos, 0), gData);
-            Material material = material_decode(gData);
-
-            float outNDotL = saturate(dot(gData.normal, winL_out));
-            float outNDotH = saturate(dot(gData.normal, H_out));
+            float outNDotL = saturate(dot(centerSampleData.normal, winL_out));
+            float outNDotH = saturate(dot(centerSampleData.normal, H_out));
             float outLDotH = saturate(dot(winL_out, H_out));
 
-            vec3 outFresnel = fresnel_evalMaterial(material, outLDotH);
-            float lambertianBRDF = outNDotL * RCP_PI;
             float NDotV = saturate(dot(centerSampleData.normal, V));
-            float ggxBRDF = bsdf_ggx(material, outNDotL, NDotV, outNDotH);
+            ResampleBRDF outBRDF = resampleMaterial_evalBRDF(centerMaterial, outNDotL, NDotV, outNDotH, outLDotH);
+            float diffRatio = outBRDF.diffuse * safeRcp(outBRDF.full);
 
-            vec3 diffuseWeight = material.dielectric * (1.0 - outFresnel) * lambertianBRDF;
-            vec3 specularWeight = outFresnel * ggxBRDF;
-            vec3 fullBRDF = diffuseWeight + specularWeight;
-            vec3 diffRatio3 = diffuseWeight * safeRcp(fullBRDF);
-
-            vec3 totalOutput = selectedSampleF.xyz * fullBRDF * avgWY;
-            ssgiDiffOut = vec4(totalOutput * diffRatio3, winHitDist);
-            ssgiSpecOut = vec4(totalOutput * (vec3(1.0) - diffRatio3), winHitDist);
-            vec3 specBrdf = texture(usam_specBRDFLUT, vec2(NDotV, material.roughness)).rgb;
-            vec3 specAlbedo = saturate(material.f0RGB * specBrdf.x + material.f82TintRGB * specBrdf.y + specBrdf.z);
+            vec3 totalOutput = selectedSampleF.xyz * outBRDF.full * avgWY;
+            ssgiDiffOut = vec4(totalOutput * diffRatio, winHitDist);
+            ssgiSpecOut = vec4(totalOutput * (1.0 - diffRatio), winHitDist);
+            vec3 specAlbedo = resampleMaterial_specularAlbedo(centerMaterial, NDotV);
             ssgiSpecOut.rgb *= safeRcp(specAlbedo);
 
             #if SETTING_DEBUG_OUTPUT

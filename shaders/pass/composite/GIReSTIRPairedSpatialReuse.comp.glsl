@@ -109,10 +109,6 @@ void main() {
         if (viewZA > -65536.0 && viewZB > -65536.0) {
             uvec4 spatialSamplePackedDataA = transient_restir_spatialInput_fetch(texelA);
             uvec4 spatialSamplePackedDataB = transient_restir_spatialInput_fetch(texelB);
-            uvec4 gbufferSolidData1A = texelFetch(usam_gbufferSolidData1, texelA, 0);
-            uvec4 gbufferSolidData1B = texelFetch(usam_gbufferSolidData1, texelB, 0);
-            uvec4 gbufferSolidData2A = texelFetch(usam_gbufferSolidData2, texelA, 0);
-            uvec4 gbufferSolidData2B = texelFetch(usam_gbufferSolidData2, texelB, 0);
             uvec4 repA;
             uvec4 repB;
             if (bool(frameCounter & 1)) {
@@ -125,16 +121,6 @@ void main() {
 
             SpatialSampleData sampleA = spatialSampleData_unpack(spatialSamplePackedDataA);
             SpatialSampleData sampleB = spatialSampleData_unpack(spatialSamplePackedDataB);
-
-            GBufferData gDataA = gbufferData_init();
-            gbufferData1_unpack(gbufferSolidData1A, gDataA);
-            gbufferData2_unpack(gbufferSolidData2A, gDataA);
-            Material matA = material_decode(gDataA);
-
-            GBufferData gDataB = gbufferData_init();
-            gbufferData1_unpack(gbufferSolidData1B, gDataB);
-            gbufferData2_unpack(gbufferSolidData2B, gDataB);
-            Material matB = material_decode(gDataB);
 
             ReSTIRReservoir canonResA = restir_reservoir_unpack(repA);
             ReSTIRReservoir canonResB = restir_reservoir_unpack(repB);
@@ -149,9 +135,13 @@ void main() {
                 vec3 viewPosA = coords_toViewCoord(screenPosA, viewZA, global_camProjInverse);
                 vec2 screenPosB = coords_texelToUV(texelB, uval_mainImageSizeRcp);
                 vec3 viewPosB = coords_toViewCoord(screenPosB, viewZB, global_camProjInverse);
-
-                ShiftMapping shiftAtoB = evaluateShiftMapping(canonResA, matB, sampleB, sampleA, viewPosB, viewPosA);
+                
+                ResampleMaterial matA = resampleMaterial_fetch(texelA);
                 ShiftMapping shiftBtoA = evaluateShiftMapping(canonResB, matA, sampleA, sampleB, viewPosA, viewPosB);
+
+                ResampleMaterial matB = resampleMaterial_fetch(texelB);
+                ShiftMapping shiftAtoB = evaluateShiftMapping(canonResA, matB, sampleB, sampleA, viewPosB, viewPosA);
+
                 applyShiftMapping(texelA, texelB, accumMA, canonResA, canonResB, metaA, sampleA, sampleB, shiftBtoA, shiftAtoB);
                 applyShiftMapping(texelB, texelA, accumMB, canonResB, canonResA, metaB, sampleB, sampleA, shiftAtoB, shiftBtoA);
             }

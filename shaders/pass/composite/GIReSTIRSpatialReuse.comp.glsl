@@ -85,6 +85,7 @@ void main() {
             vec2 screenPos = coords_texelToUV(texelPos, uval_mainImageSizeRcp);
             vec3 viewPos = coords_toViewCoord(screenPos, viewZ, global_camProjInverse);
             vec3 V = normalize(-viewPos);
+            ResampleMaterial centerMaterial = resampleMaterial_fetch(texelPos);
 
             uvec4 reprojectedData;
             if (bool(frameCounter & 1)) {
@@ -124,11 +125,6 @@ void main() {
             vec4 selectedSampleF = originalSample;
 
             {
-                GBufferData gData = gbufferData_init();
-                gbufferData1_unpack(texelFetch(usam_gbufferSolidData1, texelPos, 0), gData);
-                gbufferData2_unpack(texelFetch(usam_gbufferSolidData2, texelPos, 0), gData);
-                Material material = material_decode(gData);
-
                 vec2 noise2 = rand_stbnVec2(texelPos, RANDOM_FRAME);
                 float angle = noise2.x * PI_2;
                 f16vec2 dir = f16vec2(cos(angle), sin(angle));
@@ -184,7 +180,7 @@ void main() {
                         vec3 neighborSampleDirView = hitDiff * rcpHitDist;
 
                         vec3 hitRadiance = neighborData.sampleValue.xyz;
-                        float neighborPHat = evalTargetFunction(hitRadiance, centerSampleData.normal, neighborSampleDirView, V, material);
+                        float neighborPHat = evalTargetFunction(hitRadiance, centerSampleData.normal, neighborSampleDirView, V, centerMaterial);
 
                         // offsetB = neighborReservoir.Y.xyz * Y.w, which is already a scaled unit vector
                         // RB2 = dot(offsetB, offsetB) = Y.w^2  (Y.xyz is a unit direction)
@@ -219,9 +215,9 @@ void main() {
                                 float cCosPhiA = -dot(cDirAtNbr, centerSampleData.hitNormal);
                                 if (cCosPhiA > 0.0) {
                                     float jacCn = clamp((RB2_canon * cCosPhiA) / (cHitDist2 * cosPhiB_canon), 0.0, 256.0);
-                                    // Evaluate BRDF at neighbor for center's sample direction (center material as approx)
+                                    ResampleMaterial neighborMaterial = resampleMaterial_fetch(sampleTexelPos);
                                     vec3 VNeighbor = -normalize(neighborViewPos);
-                                    float piRcY = evalTargetFunction(originalSample.xyz, neighborData.normal, cDirAtNbr, VNeighbor, material) * jacCn;
+                                    float piRcY = evalTargetFunction(originalSample.xyz, neighborData.normal, cDirAtNbr, VNeighbor, neighborMaterial) * jacCn;
                                     float MiPiRcY = neighborReservoir.m * piRcY;
                                     mc += 1.0 - MiPiRcY * safeRcp(MiPiRcY + rcMDivK * originalSample.w);
                                 } else {
@@ -275,30 +271,18 @@ void main() {
             float winHitDist = resultReservoir.Y.w;
             vec3 H_out = normalize(winL_out + V);
 
-            GBufferData gData = gbufferData_init();
-            gbufferData1_unpack(texelFetch(usam_gbufferSolidData1, texelPos, 0), gData);
-            gbufferData2_unpack(texelFetch(usam_gbufferSolidData2, texelPos, 0), gData);
-            Material material = material_decode(gData);
-
-            float outNDotL = saturate(dot(gData.normal, winL_out));
-            float outNDotH = saturate(dot(gData.normal, H_out));
+            float outNDotL = saturate(dot(centerSampleData.normal, winL_out));
+            float outNDotH = saturate(dot(centerSampleData.normal, H_out));
             float outLDotH = saturate(dot(winL_out, H_out));
 
-            vec3 outFresnel = fresnel_evalMaterial(material, outLDotH);
-            float lambertianBRDF = outNDotL * RCP_PI;
             float NDotV = saturate(dot(centerSampleData.normal, V));
-            float ggxBRDF = bsdf_ggx(material, outNDotL, NDotV, outNDotH);
+            ResampleBRDF outBRDF = resampleMaterial_evalBRDF(centerMaterial, outNDotL, NDotV, outNDotH, outLDotH);
+            float diffRatio = outBRDF.diffuse * safeRcp(outBRDF.full);
 
-            vec3 diffuseWeight = material.dielectric * (1.0 - outFresnel) * lambertianBRDF;
-            vec3 specularWeight = outFresnel * ggxBRDF;
-            vec3 fullBRDF = diffuseWeight + specularWeight;
-            vec3 diffRatio3 = diffuseWeight * safeRcp(fullBRDF);
-
-            vec3 totalOutput = selectedSampleF.xyz * fullBRDF * avgWY;
-            ssgiDiffOut = vec4(totalOutput * diffRatio3, winHitDist);
-            ssgiSpecOut = vec4(totalOutput * (vec3(1.0) - diffRatio3), winHitDist);
-            vec3 specBrdf = texture(usam_specBRDFLUT, vec2(NDotV, material.roughness)).rgb;
-            vec3 specAlbedo = saturate(material.f0RGB * specBrdf.x + material.f82TintRGB * specBrdf.y + specBrdf.z);
+            vec3 totalOutput = selectedSampleF.xyz * outBRDF.full * avgWY;
+            ssgiDiffOut = vec4(totalOutput * diffRatio, winHitDist);
+            ssgiSpecOut = vec4(totalOutput * (1.0 - diffRatio), winHitDist);
+            vec3 specAlbedo = resampleMaterial_specularAlbedo(centerMaterial, NDotV);
             ssgiSpecOut.rgb *= safeRcp(specAlbedo);
 
             #if SETTING_DEBUG_OUTPUT
