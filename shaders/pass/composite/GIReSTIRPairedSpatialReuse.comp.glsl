@@ -47,7 +47,6 @@ ShiftMapping srcToDst, ShiftMapping dstToSrc
     if (shiftMapping_isReusable(srcToDst)) {
         float accumMDST = transient_restir_spatialReservoirAccum_fetch(texelDST).x;
         uvec4 pairwiseMISMetadataDST = transient_restir_pairwiseMISMetadata_fetch(texelDST);
-        PairwiseMISMetadata metaDST = pairwiseMISMetadata_unpack(pairwiseMISMetadataDST);
 
         float rcMDivK_DST = canonResDST.m / 8.0;
         float MiPiRiY = canonResSRC.m * sampleSRC.sampleValue.w;
@@ -59,6 +58,7 @@ ShiftMapping srcToDst, ShiftMapping dstToSrc
             mcIncrement_DST = 1.0 - MiPiRcY * safeRcp(MiPiRcY + rcMDivK_DST * sampleDST.sampleValue.w);
         }
 
+        PairwiseMISMetadata metaDST = pairwiseMISMetadata_unpack(pairwiseMISMetadataDST);
         metaDST.mc += mcIncrement_DST;
         metaDST.numValidNeighbors += 1u;
 
@@ -112,13 +112,13 @@ void main() {
                     repB = history_restir_reservoirTemporal2_fetch(texelB);
                 }
 
-                ReSTIRReservoir canonResA = restir_reservoir_unpack(repA);
-                ReSTIRReservoir canonResB = restir_reservoir_unpack(repB);
-
                 vec2 screenPosA = coords_texelToUV(texelA, uval_mainImageSizeRcp);
                 vec3 viewPosA = coords_toViewCoord(screenPosA, viewZA, global_camProjInverse);
                 vec2 screenPosB = coords_texelToUV(texelB, uval_mainImageSizeRcp);
                 vec3 viewPosB = coords_toViewCoord(screenPosB, viewZB, global_camProjInverse);
+
+                ReSTIRReservoir canonResA = restir_reservoir_unpack(repA);
+                ReSTIRReservoir canonResB = restir_reservoir_unpack(repB);
 
                 ResampleMaterial matA = resampleMaterial_unpack(transient_restir_resampleMaterial_fetch(texelA));
                 ShiftMapping shiftBtoA = evaluateShiftMapping(canonResB, matA, sampleA, sampleB, viewPosA, viewPosB);
