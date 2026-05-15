@@ -66,9 +66,9 @@ struct DispatchParameters {
 										// Recommended starting value: false
 
 	// Debug views
-	bool DebugOutputEdgeMask;			// Use this to visualize edges, for tuning the 'BilinearThreshold' value.
-	bool DebugOutputThreadIndex;		// Debug output to visualize layout of compute threads
-	bool DebugOutputWaveIndex;			// Debug output to visualize layout of compute wavefronts, useful to sanity check the Light Coordinate is being computed correctly.
+	// bool DebugOutputEdgeMask;			// Use this to visualize edges, for tuning the 'BilinearThreshold' value.
+	// bool DebugOutputThreadIndex;		// Debug output to visualize layout of compute threads
+	// bool DebugOutputWaveIndex;			// Debug output to visualize layout of compute wavefronts, useful to sanity check the Light Coordinate is being computed correctly.
 
 	// Culling / Early out:
 	vec2 DepthBounds;					// Depth Bounds (min, max) for the on-screen volume of the light. Typically (0,1) for directional lights. Only used when 'UseEarlyOut' is true.
@@ -193,12 +193,12 @@ void WriteScreenSpaceShadow(DispatchParameters params, ivec3 groupID, uint laneI
         if (gl_SubgroupSize == WAVE_SIZE) {
             if (!wave_active) return;
         } else {
-             // Fallback for non-matching WaveSize
-             LdsEarlyOut = true;
-             barrier();
-             if (wave_active) LdsEarlyOut = false;
-             barrier();
-             if (LdsEarlyOut) return;
+            // Fallback for non-matching WaveSize
+            LdsEarlyOut = true;
+            barrier();
+            if (wave_active) LdsEarlyOut = false;
+            barrier();
+            if (LdsEarlyOut) return;
         }
     }
 
@@ -291,7 +291,11 @@ void main() {
     uint dataPtr = BEND_SSS_PARAMS_BASE + 8u;
 
     bool found = false;
-    uint wcY, wcZ, woX, woY, groupStart;
+    uint wcY = 0u;
+    uint wcZ = 0u;
+    uint woX = 0u;
+    uint woY = 0u;
+    uint groupStart = 0u;
 
     for (uint i = 0u; i < totalDispatches; i++) {
         uint start = indirectComputeData[dataPtr + i * 6u + 4u];
