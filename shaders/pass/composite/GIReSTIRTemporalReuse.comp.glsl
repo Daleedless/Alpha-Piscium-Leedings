@@ -144,8 +144,6 @@ void main() {
     barrier();
 
     if (all(lessThan(texelPos, uval_mainImageSizeI))) {
-        PairwiseMISMetadata meta = pairwiseMISMetadata_init(texelPos);
-        transient_restir_pairwiseMISMetadata_store(texelPos, pairwiseMISMetadata_pack(meta));
         ReSTIRReservoir temporalReservoir = restir_initReservoir();
         float viewZ = hiz_groupGroundCheckSubgroupLoadViewZ(swizzledWGPos.xy, 4, texelPos);
         if (viewZ > -65536.0) {
@@ -211,10 +209,10 @@ void main() {
                 gbufferData1_unpack(texelFetch(usam_gbufferSolidData1, texelPos, 0), gData);
                 gbufferData2_unpack(texelFetch(usam_gbufferSolidData2, texelPos, 0), gData);
                 Material material = material_decode(gData);
-                ResampleMaterial resampleMaterial = resampleMaterial_fromMaterial(material);
 
                 float hitDistance = transient_gi_initialSampleHitDistance_fetch(texelPos).x;
                 restir_InitialSampleData initialSample = restir_initalSample_restoreData(texelPos, viewZ, gData.geomNormal, gData.normal, material, hitDistance);
+                ResampleMaterial resampleMaterial = resampleMaterial_fromMaterial(material);
                 vec3 hitRadiance = initialSample.hitRadiance;
                 vec3 sampleDirView = initialSample.directionAndLength.xyz;
 
@@ -291,6 +289,8 @@ void main() {
                 #endif
             }
         }
+        PairwiseMISMetadata meta = pairwiseMISMetadata_init(texelPos);
+        transient_restir_pairwiseMISMetadata_store(texelPos, pairwiseMISMetadata_pack(meta));
         transient_restir_spatialReservoirAccum_store(texelPos, vec4(temporalReservoir.m));
         uvec4 packedReservoir = restir_reservoir_pack(temporalReservoir);
         if (bool(frameCounter & 1)) {
