@@ -38,15 +38,17 @@ bool restir_updateReservoirM(inout float reservoirM, inout float wSum, float wi,
     return rand < wi / wSum;
 }
 
-void applyShiftMapping(
+void doResample(
 ivec2 texelDST, ivec2 texelSRC,
-inout float accumMDST,
 ReSTIRReservoir canonResDST, ReSTIRReservoir canonResSRC,
-inout PairwiseMISMetadata metaDST,
 SpatialSampleData sampleDST, SpatialSampleData sampleSRC,
 ShiftMapping srcToDst, ShiftMapping dstToSrc
 ) {
     if (shiftMapping_isReusable(srcToDst)) {
+        float accumMDST = transient_restir_spatialReservoirAccum_fetch(texelDST).x;
+        uvec4 pairwiseMISMetadataDST = transient_restir_pairwiseMISMetadata_fetch(texelDST);
+        PairwiseMISMetadata metaDST = pairwiseMISMetadata_unpack(pairwiseMISMetadataDST);
+
         float rcMDivK_DST = canonResDST.m / 8.0;
         float MiPiRiY = canonResSRC.m * sampleSRC.sampleValue.w;
         float mi_DST = MiPiRiY * safeRcp(MiPiRiY + rcMDivK_DST * srcToDst.reusableTargetPHat);
@@ -67,6 +69,8 @@ ShiftMapping srcToDst, ShiftMapping dstToSrc
             metaDST.selectedTexel = texelSRC;
         }
         metaDST.spatialWSum = spatialWSumDST;
+        transient_restir_spatialReservoirAccum_store(texelDST, vec4(accumMDST));
+        transient_restir_pairwiseMISMetadata_store(texelDST, pairwiseMISMetadata_pack(metaDST));
     }
 }
 
@@ -98,9 +102,6 @@ void main() {
             SpatialSampleData sampleB = spatialSampleData_unpack(spatialSamplePackedDataB);
 
             if (dot(sampleA.geomNormal, sampleB.geomNormal) > 0.99) {
-                float accumMA = 0.0;
-                float accumMB = 0.0;
-
                 uvec4 repA;
                 uvec4 repB;
                 if (bool(frameCounter & 1)) {
@@ -113,22 +114,6 @@ void main() {
 
                 ReSTIRReservoir canonResA = restir_reservoir_unpack(repA);
                 ReSTIRReservoir canonResB = restir_reservoir_unpack(repB);
-                PairwiseMISMetadata metaA = pairwiseMISMetadata_init(texelA);
-                PairwiseMISMetadata metaB = pairwiseMISMetadata_init(texelB);
-
-                #if PASS_INDEX == 0
-                accumMA = canonResA.m;
-                accumMB = canonResB.m;
-                #else
-                vec4 spatialReservoirAccumA = transient_restir_spatialReservoirAccum_fetch(texelA);
-                vec4 spatialReservoirAccumB = transient_restir_spatialReservoirAccum_fetch(texelB);
-                uvec4 pairwiseMISMetadataA = transient_restir_pairwiseMISMetadata_fetch(texelA);
-                uvec4 pairwiseMISMetadataB = transient_restir_pairwiseMISMetadata_fetch(texelB);
-                accumMA = spatialReservoirAccumA.x;
-                accumMB = spatialReservoirAccumB.x;
-                metaA = pairwiseMISMetadata_unpack(pairwiseMISMetadataA);
-                metaB = pairwiseMISMetadata_unpack(pairwiseMISMetadataB);
-                #endif
 
                 vec2 screenPosA = coords_texelToUV(texelA, uval_mainImageSizeRcp);
                 vec3 viewPosA = coords_toViewCoord(screenPosA, viewZA, global_camProjInverse);
@@ -141,14 +126,8 @@ void main() {
                 ResampleMaterial matB = resampleMaterial_unpack(transient_restir_resampleMaterial_fetch(texelB));
                 ShiftMapping shiftAtoB = evaluateShiftMapping(canonResA, matB, sampleB, sampleA, viewPosB, viewPosA);
 
-                applyShiftMapping(texelA, texelB, accumMA, canonResA, canonResB, metaA, sampleA, sampleB, shiftBtoA, shiftAtoB);
-                applyShiftMapping(texelB, texelA, accumMB, canonResB, canonResA, metaB, sampleB, sampleA, shiftAtoB, shiftBtoA);
-
-                transient_restir_pairwiseMISMetadata_store(texelA, pairwiseMISMetadata_pack(metaA));
-                transient_restir_pairwiseMISMetadata_store(texelB, pairwiseMISMetadata_pack(metaB));
-
-                transient_restir_spatialReservoirAccum_store(texelA, vec4(accumMA));
-                transient_restir_spatialReservoirAccum_store(texelB, vec4(accumMB));
+                doResample(texelA, texelB, canonResA, canonResB, sampleA, sampleB, shiftBtoA, shiftAtoB);
+                doResample(texelB, texelA, canonResB, canonResA, sampleB, sampleA, shiftAtoB, shiftBtoA);
             }
         }
     }
