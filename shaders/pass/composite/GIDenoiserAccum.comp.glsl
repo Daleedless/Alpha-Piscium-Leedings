@@ -102,8 +102,8 @@ void main() {
                 vec4 newSpecular = transient_ssgiSpecOut_fetch(texelPos);
                 #if SETTING_DEBUG_OUTPUT
                 if (RANDOM_FRAME < MAX_FRAMES) {
-                    imageStore(uimg_temp2, texelPos, newDiffuse);
-                    //                    imageStore(uimg_temp2, texelPos, newSpecular);
+                    // imageStore(uimg_temp2, texelPos, newDiffuse);
+                    imageStore(uimg_temp2, texelPos, newSpecular);
                 }
                 #endif
 
@@ -114,6 +114,9 @@ void main() {
                 gi_historyData_unpack3(historyData, transient_gi3Reprojected_fetch(texelPos));
                 gi_historyData_unpack4(historyData, transient_gi4Reprojected_fetch(texelPos));
                 gi_historyData_unpack5(historyData, transient_gi5Reprojected_fetch(texelPos));
+                #if SETTING_DEBUG_OUTPUT
+                imageStore(uimg_temp1, texelPos, historyData.realHistoryLength.xxxx);
+                #endif
                 barrier();
 
                 if (RANDOM_FRAME >= 0 && RANDOM_FRAME < MAX_FRAMES) {

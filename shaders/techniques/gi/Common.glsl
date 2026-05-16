@@ -89,8 +89,8 @@ void gi_historyData_unpack4(inout GIHistoryData data, vec4 packedData) {
 
 void gi_historyData_unpack5(inout GIHistoryData data, vec4 packedData) {
     data.historyLength = packedData.x;
-    data.realHistoryLength = packedData.y;
-    data.specularHistoryLength = packedData.z;
+    data.specularHistoryLength = packedData.y;
+    data.realHistoryLength = packedData.z;
     data.glazingAngleFactor = packedData.w;
 }
 
@@ -111,7 +111,7 @@ vec4 gi_historyData_pack4(GIHistoryData data) {
 }
 
 vec4 gi_historyData_pack5(GIHistoryData data) {
-    return vec4(data.historyLength, data.realHistoryLength, data.specularHistoryLength, data.glazingAngleFactor);
+    return vec4(data.historyLength, data.specularHistoryLength, data.realHistoryLength, data.glazingAngleFactor);
 }
 
 float gi_planeDistance(vec3 pos1, vec3 normal1, vec3 pos2, vec3 normal2) {

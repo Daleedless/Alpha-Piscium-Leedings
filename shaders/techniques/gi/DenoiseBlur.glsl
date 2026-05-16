@@ -184,7 +184,7 @@ void main() {
 
             vec4 historyData5 = transient_gi5Reprojected_fetch(texelPos);
             float historyLength = max(historyData5.x * TOTAL_HISTORY_LENGTH, 1.0);
-            float specularHistoryLength = max(historyData5.z * TOTAL_HISTORY_LENGTH, 1.0);
+            float specularHistoryLength = max(historyData5.y * TOTAL_HISTORY_LENGTH, 1.0);
             float diffAccumFactor = rcp(1.0 + pow2(0.1 * historyLength));
             float specAccumFactor = rcp(1.0 + pow2(0.1 * specularHistoryLength));
 
@@ -193,9 +193,6 @@ void main() {
             hitDistFactor = pow2(hitDistFactor);
             #endif
             hitDistFactor = hitDistFactor * vec2(0.9, 0.95) + vec2(0.1, 0.05);
-            #if SETTING_DEBUG_OUTPUT
-            imageStore(uimg_temp1, texelPos, hitDistFactor.yyyy);
-            #endif
 
             float16_t jitterR = float16_t(blurJitter.y);
             float angle = blurJitter.x * PI_2;
@@ -328,7 +325,7 @@ void main() {
                 kernelRadius *= specAccumFactor;
                 kernelRadius += filteredInputVariance.y * baseKernelRadius.y;
                 kernelRadius *= hitDistFactor.y;
-                kernelRadius *= pow(centerGeomData.roughness, 0.25 * historyData5.z);
+                kernelRadius *= pow(centerGeomData.roughness, 0.25 * historyData5.y);
                 kernelRadius = clamp(kernelRadius, baseKernelRadius.z, baseKernelRadius.w);
                 float worldRadius = kernelRadius * abs(centerGeomData.viewPos.z) * uval_mainImageSizeRcp.y;
                 vec3 specTFP32, specBFP32;
@@ -348,7 +345,7 @@ void main() {
                 float sigmaFP32 = 0.69;
                 sigmaFP32 += 8.0 - hitDistFactor.y * 8.0;
                 sigmaFP32 *= 1.0 - filteredInputVariance.y;
-                sigmaFP32 += 0.025 * pow(centerGeomData.roughness, -historyData5.z);
+                sigmaFP32 += 0.025 * pow(centerGeomData.roughness, -historyData5.y);
                 float16_t sigma = float16_t(-sigmaFP32);
 
                 vec4 centerSpec = _gi_readSpec(texelPos);
