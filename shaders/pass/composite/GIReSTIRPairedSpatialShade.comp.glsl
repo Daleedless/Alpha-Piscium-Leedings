@@ -26,6 +26,16 @@ layout(rgba8) uniform restrict writeonly image2D uimg_temp5;
 
 shared uint shared_rayCount[16];
 
+ReSTIRReservoir readTemporalReservoir(ivec2 texelPos) {
+    uvec4 reprojectedData;
+    if (bool(frameCounter & 1)) {
+        reprojectedData = history_restir_reservoirTemporal1_fetch(texelPos);
+    } else {
+        reprojectedData = history_restir_reservoirTemporal2_fetch(texelPos);
+    }
+    return restir_reservoir_unpack(reprojectedData);
+}
+
 void main() {
     sst_init(SETTING_GI_SST_THICKNESS);
     uint workGroupIdx = gl_WorkGroupID.y * gl_NumWorkGroups.x + gl_WorkGroupID.x;
@@ -57,17 +67,15 @@ void main() {
             vec3 V = normalize(-viewPos);
             ResampleMaterial centerMaterial = resampleMaterial_unpack(transient_restir_resampleMaterial_fetch(texelPos));
 
-            uvec4 reprojectedData = bool(frameCounter & 1) ? history_restir_reservoirTemporal1_fetch(texelPos) : history_restir_reservoirTemporal2_fetch(texelPos);
-            ReSTIRReservoir temporalReservoir = restir_reservoir_unpack(reprojectedData);
-
             PairwiseMISMetadata metadata = pairwiseMISMetadata_unpack(transient_restir_pairwiseMISMetadata_fetch(texelPos));
 
             ivec2 winTexel = metadata.selectedTexel;
             uint numValidNeighbors = metadata.numValidNeighbors;
             float mc = metadata.mc;
             float spatialWSum = metadata.spatialWSum;
-            ReSTIRReservoir spatialReservoir = restir_initReservoir();
-            spatialReservoir.Y = temporalReservoir.Y;
+
+            ReSTIRReservoir spatialReservoir = readTemporalReservoir(texelPos);
+            vec4 originalSample = spatialReservoir.Y;
             spatialReservoir.m = metadata.accumM;
 
             vec4 selectedSampleF = centerSampleData.sampleValue;
@@ -77,22 +85,21 @@ void main() {
                 vec2 winScreenPos = coords_texelToUV(winTexel, uval_mainImageSizeRcp);
                 vec3 winViewPos = coords_toViewCoord(winScreenPos, winViewZ, global_camProjInverse);
 
-                uvec4 winRep = bool(frameCounter & 1) ? history_restir_reservoirTemporal1_fetch(winTexel) : history_restir_reservoirTemporal2_fetch(winTexel);
-                ReSTIRReservoir winRes = restir_reservoir_unpack(winRep);
+                ReSTIRReservoir winRes = readTemporalReservoir(winTexel);
 
                 ShiftMapping winToCenter = evaluateShiftMapping(winRes, centerMaterial, centerSampleData, winSample, viewPos, winViewPos);
                 spatialReservoir.Y = winToCenter.Y;
                 selectedSampleF = vec4(winSample.sampleValue.xyz, winToCenter.targetPHat);
             }
 
-            float rcAvgWY = max(temporalReservoir.avgWY, 0.0);
+            float rcAvgWY = max(spatialReservoir.avgWY, 0.0);
             float canonicalWi = centerSampleData.sampleValue.w * rcAvgWY * mc;
             float canonicalRand = rand_stbnVec1(rand_newStbnPos(texelPos, RANDOM_FRAME / 64u + 4u + 8u), RANDOM_FRAME);
 
             bool chooseCanon = restir_updateReservoir(
                 spatialReservoir,
                 spatialWSum,
-                temporalReservoir.Y,
+                originalSample,
                 canonicalWi,
                 0.0,
                 canonicalRand
@@ -107,7 +114,7 @@ void main() {
             ReSTIRReservoir resultReservoir = spatialReservoir;
 
             float avgWY = spatialWSum * safeRcp(selectedSampleF.w) * safeRcp(float(numValidNeighbors + 1u));
-            resultReservoir.avgWY = avgWY;
+            // resultReservoir.avgWY = avgWY;
 
             vec3 winL_out = resultReservoir.Y.xyz;
             float winHitDist = resultReservoir.Y.w;
@@ -136,14 +143,14 @@ void main() {
                 #endif
 
                 SSTRay sstRay;
-                if (spatialReservoir.Y.w > 0.0) {
-                    vec3 expectHitViewPos = viewPos + spatialReservoir.Y.xyz * spatialReservoir.Y.w;
+                if (resultReservoir.Y.w > 0.0) {
+                    vec3 expectHitViewPos = viewPos + resultReservoir.Y.xyz * resultReservoir.Y.w;
                     vec3 rayOrigin = coords_viewToScreen(viewPos, global_camProj);
                     vec3 rayEnd = coords_viewToScreen(expectHitViewPos, global_camProj);
                     vec4 rayDirLen = normalizeAndLength(rayEnd - rayOrigin);
                     sstRay = sstray_setup(texelPos, rayOrigin, rayDirLen.xyz, rayDirLen.w);
                 } else {
-                    sstRay = sstray_setup(texelPos, viewPos, spatialReservoir.Y.xyz);
+                    sstRay = sstray_setup(texelPos, viewPos, resultReservoir.Y.xyz);
                 }
                 sst_trace(sstRay, 4);
                 if (sstRay.currT > 0.0) {
