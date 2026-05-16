@@ -102,8 +102,8 @@ void main() {
                 vec4 newSpecular = transient_ssgiSpecOut_fetch(texelPos);
                 #if SETTING_DEBUG_OUTPUT
                 if (RANDOM_FRAME < MAX_FRAMES) {
-                        imageStore(uimg_temp2, texelPos, newDiffuse);
-//                    imageStore(uimg_temp2, texelPos, newSpecular);
+                    imageStore(uimg_temp2, texelPos, newDiffuse);
+                    //                    imageStore(uimg_temp2, texelPos, newSpecular);
                 }
                 #endif
 
@@ -180,14 +180,13 @@ void main() {
                     historyData.specularFastColor = mix(historyData.specularFastColor, newSpecular.rgb, alpha.w);
 
                     float newHitDistance = transient_gi_initialSampleHitDistance_fetch(texelPos).x;
-                    if (newHitDistance < 0.0) {
-                        newHitDistance = SPEC_MAX_HIT_DISTANCE;
-                    }
                     float diffHitDistanceAlpha = rcp(min(historyLengths.x, 16.0));
                     float specHitDistanceAlpha = rcp(min(historyLengths.y, 16.0));
-                    newHitDistance = min(newHitDistance, SPEC_MAX_HIT_DISTANCE);
-                    historyData.specularHitDistance = mix(historyData.specularHitDistance, newHitDistance, specHitDistanceAlpha);
-                    historyData.diffuseHitDistance = mix(historyData.diffuseHitDistance, newHitDistance, diffHitDistanceAlpha);
+
+                    if (newHitDistance > 0.0) {
+                        historyData.specularHitDistance = mix(historyData.specularHitDistance, min(newHitDistance, GI_MAX_HIT_DISTANCE), specHitDistanceAlpha);
+                        historyData.diffuseHitDistance = mix(historyData.diffuseHitDistance, min(newHitDistance, GI_MAX_HIT_DISTANCE), diffHitDistanceAlpha);
+                    }
 
                     historyLengths = saturate(historyLengths / TOTAL_HISTORY_LENGTH);
                     historyData.historyLength = historyLengths.x;

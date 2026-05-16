@@ -81,7 +81,7 @@ void loadSharedDataMoments(uvec2 groupOriginTexelPos, uint index) {
         }
 
         vec2 hitDistances = vec2(diffData.w, specData.w);
-        hitDistances = mix(vec2(DIFF_MAX_HIT_DISTANCE), hitDistances, greaterThan(hitDistances, vec2(0.0)));
+        hitDistances = mix(vec2(GI_MAX_HIT_DISTANCE), hitDistances, greaterThan(hitDistances, vec2(0.0)));
         shared_hitDistances[sharedXY.y][sharedXY.x] = hitDistances;
     }
 }
@@ -195,7 +195,7 @@ void main() {
                     vec3 specMoment1 = vec3(0.0);
                     vec3 specMoment2 = vec3(0.0);
                     #ifdef SETTING_DENOISER_SPATIAL
-                    vec2 filteredHitDitances = vec2(DIFF_MAX_HIT_DISTANCE);
+                    vec2 filteredHitDitances = vec2(GI_MAX_HIT_DISTANCE);
                     #endif
 
                     ivec2 localPos = ivec2(mortonPos) + 2; // +2 for padding
@@ -320,14 +320,14 @@ void main() {
                     #endif
 
                     #ifdef SETTING_DENOISER_SPATIAL
-                    vec2 filteredHitDitances = vec2(DIFF_MAX_HIT_DISTANCE);
+                    vec2 filteredHitDitances = vec2(GI_MAX_HIT_DISTANCE);
                     ivec2 localPos = ivec2(mortonPos) + 2; // +2 for padding
                     // 5x5 neighborhood using shared memory
                     for (int dy = -2; dy <= 2; ++dy) {
                         for (int dx = -2; dx <= 2; ++dx) {
                             ivec2 samplePos = localPos + ivec2(dx, dy);
                             vec2 neighborHitDistances = shared_hitDistances[samplePos.y][samplePos.x];
-                            neighborHitDistances = mix(vec2(DIFF_MAX_HIT_DISTANCE), neighborHitDistances, greaterThan(neighborHitDistances, vec2(0.0)));
+                            neighborHitDistances = mix(vec2(GI_MAX_HIT_DISTANCE), neighborHitDistances, greaterThan(neighborHitDistances, vec2(0.0)));
                             filteredHitDitances = min(filteredHitDitances, neighborHitDistances);
                         }
                     }

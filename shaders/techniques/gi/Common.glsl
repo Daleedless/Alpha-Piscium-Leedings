@@ -35,8 +35,7 @@ const float TOTAL_HISTORY_LENGTH = 255.0;
     Glazing Angle Factor: 8 bits    (5)
 */
 
-const float DIFF_MAX_HIT_DISTANCE = 64.0;
-const float SPEC_MAX_HIT_DISTANCE = 256.0;
+const float GI_MAX_HIT_DISTANCE = 256.0;
 
 struct GIHistoryData {
     vec3 diffuseColor;
@@ -57,11 +56,11 @@ GIHistoryData gi_historyData_init()  {
     GIHistoryData data;
     data.diffuseColor = vec3(0.0);
     data.diffuseFastColor = vec3(0.0);
-    data.diffuseHitDistance = DIFF_MAX_HIT_DISTANCE;
+    data.diffuseHitDistance = GI_MAX_HIT_DISTANCE;
 
     data.specularColor = vec3(0.0);
     data.specularFastColor = vec3(0.0);
-    data.specularHitDistance = SPEC_MAX_HIT_DISTANCE;
+    data.specularHitDistance = GI_MAX_HIT_DISTANCE;
 
     data.historyLength = 0.0;
     data.realHistoryLength = 0.0;
