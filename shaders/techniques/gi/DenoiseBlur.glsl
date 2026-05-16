@@ -192,6 +192,7 @@ void main() {
             #if GI_DENOISE_PASS == 2
             hitDistFactor = pow2(hitDistFactor);
             #endif
+            hitDistFactor = hitDistFactor * vec2(0.9, 0.95) + vec2(0.1, 0.05);
             #if SETTING_DEBUG_OUTPUT
             imageStore(uimg_temp1, texelPos, hitDistFactor.yyyy);
             #endif
@@ -220,7 +221,7 @@ void main() {
                 f16vec2 kernelRadius2 = f16vec2(kernelRadius * stretchFactor);
 
                 float sigmaFP32 = 0.69;
-                sigmaFP32 += 1.0 - hitDistFactor.x;
+                sigmaFP32 += 8.0 - hitDistFactor.x * 8.0;
                 sigmaFP32 *= 1.0 - filteredInputVariance.x;
                 float16_t sigma = float16_t(-sigmaFP32);
 
