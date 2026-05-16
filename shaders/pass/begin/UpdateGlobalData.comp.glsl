@@ -166,7 +166,7 @@ void main() {
         global_dispatchSize3 = uvec4(0u, 1u, 1u, 0u);
         ivec2 reuseTileCount = (uval_mainImageSizeI + 255) / 256 + 1;
         uvec2 restirSpatialGroups = uvec2(reuseTileCount);
-        restirSpatialGroups.y *= 128;
+        restirSpatialGroups.y *= 256;
         global_dispatchSize4 = uvec4(restirSpatialGroups.x, restirSpatialGroups.y, 1u, 0u);
         for (uint i = 0u; i < 16u; i++) {
             global_atomicCounters[i] = 0u;
