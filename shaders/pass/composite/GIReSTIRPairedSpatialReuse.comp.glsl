@@ -56,18 +56,18 @@ vec3 viewPosDST, vec3 viewPosSRC
         float dist2 = dot(diffSRCtoDST, diffSRCtoDST);
         if (dist2 > EPSILON) {
             vec3 dirSRCtoDST = diffSRCtoDST * inversesqrt(dist2);
-            float cosSRC = dot(sampleSRC.normal, canonResSRC.Y.xyz);
             float cosPhiSRC = -dot(canonResSRC.Y.xyz, sampleSRC.hitNormal);
             float cosPhiDST = -dot(dirSRCtoDST, sampleSRC.hitNormal);
             if (cosPhiSRC > 0.0 && cosPhiDST > 0.0) {
-                vec3 VDST = normalize(-viewPosDST);
                 vec4 resampleMaterialDataDST = transient_restir_resampleMaterial_fetch(texelDST);
+                vec3 VDST = normalize(-viewPosDST);
                 ResampleMaterial matDST = resampleMaterial_unpack(resampleMaterialDataDST);
                 float pHat = evalTargetFunction(sampleSRC.sampleValue.xyz, nomrlaDST, dirSRCtoDST, VDST, matDST);
                 if (pHat > 0.0) {
                     float jacobian_DST = clamp(((canonResSRC.Y.w * canonResSRC.Y.w) * cosPhiDST) / (dist2 * cosPhiSRC), 0.0, 256.0);
                     mapping.Y = vec4(dirSRCtoDST, sqrt(dist2));
                     mapping.targetPHat = pHat * jacobian_DST;
+                    float cosSRC = dot(sampleSRC.normal, canonResSRC.Y.xyz);
                     if (cosSRC > 0.0) {
                         mapping.reusableTargetPHat = mapping.targetPHat;
                     }
@@ -89,7 +89,6 @@ float dstToSrcTargetPHat
 ) {
     if (shiftMapping_isReusable(srcToDst)) {
         uvec4 pairwiseMISMetadataDST = transient_restir_pairwiseMISMetadata_fetch(texelDST);
-        PairwiseMISMetadata metaDST = pairwiseMISMetadata_unpack(pairwiseMISMetadataDST);
 
         float rcMDivK_DST = canonMDST / SETTING_GI_SPATIAL_REUSE_COUNT;
         float MiPiRiY = canonMSRC * sampleSRC.sampleValue.w;
@@ -101,6 +100,7 @@ float dstToSrcTargetPHat
             mcIncrement_DST = 1.0 - MiPiRcY * safeRcp(MiPiRcY + rcMDivK_DST * dstPHat);
         }
 
+        PairwiseMISMetadata metaDST = pairwiseMISMetadata_unpack(pairwiseMISMetadataDST);
         metaDST.mc += mcIncrement_DST;
         metaDST.numValidNeighbors += 1u;
 
@@ -156,9 +156,8 @@ void main() {
                 }
                 vec3 viewPosOther = subgroupShuffleXor(viewPosMe, 1);
                 vec3 normalOther = nzpacking_unpackNormalOct32(packedDataOther.y);
-                ReSTIRReservoir canonResMe = restir_reservoir_unpack(repMe);
-
                 ivec2 texelOther = subgroupShuffleXor(texelMe, 1);
+                ReSTIRReservoir canonResMe = restir_reservoir_unpack(repMe);
                 ShiftMapping shiftMeToOther = evaluateShiftMapping(texelOther, canonResMe, normalOther, sampleMe, viewPosOther, viewPosMe);
 
                 float otherToMePHat = subgroupShuffleXor(shiftMeToOther.targetPHat, 1);
