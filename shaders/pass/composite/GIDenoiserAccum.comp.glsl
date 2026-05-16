@@ -100,12 +100,6 @@ void main() {
             if (viewZ > -65536.0) {
                 vec4 newDiffuse = transient_ssgiDiffOut_fetch(texelPos);
                 vec4 newSpecular = transient_ssgiSpecOut_fetch(texelPos);
-                #if SETTING_DEBUG_OUTPUT
-                if (RANDOM_FRAME < MAX_FRAMES) {
-                    // imageStore(uimg_temp2, texelPos, newDiffuse);
-                    imageStore(uimg_temp2, texelPos, newSpecular);
-                }
-                #endif
 
                 GIHistoryData historyData = gi_historyData_init();
 
@@ -170,11 +164,10 @@ void main() {
                     // y: regular, specular
                     // z: fast, diffuse
                     // w: fast, specular
-                    vec3 accumHistoryLength = historyLengths;
-                    accumHistoryLength.z = min(accumHistoryLength.z, SETTING_DENOISER_FAST_HISTORY_LENGTH);
-                    vec3 rcpAccumHistoryLength = rcp(accumHistoryLength);
-                    vec4 rcpAccumHistoryLength4 = rcpAccumHistoryLength.xyzz;
-                    vec4 alpha = vec4(newWeights, pow(newWeights, vec2(0.1))) * rcpAccumHistoryLength4;
+                    vec4 accumHistoryLength = historyLengths.xyzz;
+                    accumHistoryLength.zw = min(accumHistoryLength.zw, max(vec2(SETTING_DENOISER_FAST_HISTORY_LENGTH, SETTING_DENOISER_FAST_HISTORY_LENGTH * specAccumRecuctionFactor), 2.0));
+                    vec4 rcpAccumHistoryLength = rcp(accumHistoryLength);
+                    vec4 alpha = vec4(newWeights, pow(newWeights, vec2(0.1))) * rcpAccumHistoryLength;
 
                     historyData.diffuseColor = mix(historyData.diffuseColor, newDiffuse.rgb, alpha.x);
                     historyData.specularColor = mix(historyData.specularColor, newSpecular.rgb, alpha.y);
