@@ -48,7 +48,7 @@ vec3 viewPosDST, vec3 viewPosSRC
     const float EPSILON = 1e-6;
     ShiftMapping mapping = shiftMapping_init();
 
-    if (canonResSRC.Y.w > EPSILON && restir_isReservoirValid(canonResSRC)) {
+    if (canonResSRC.Y.w > EPSILON) {
         vec3 hitViewPosSRC = viewPosSRC + canonResSRC.Y.xyz * canonResSRC.Y.w;
         vec3 diffSRCtoDST = hitViewPosSRC - viewPosDST;
         float dist2 = dot(diffSRCtoDST, diffSRCtoDST);
@@ -86,7 +86,6 @@ ShiftMapping srcToDst, ShiftMapping dstToSrc
     if (shiftMapping_isReusable(srcToDst)) {
         uvec4 pairwiseMISMetadataDST = transient_restir_pairwiseMISMetadata_fetch(texelDST);
         PairwiseMISMetadata metaDST = pairwiseMISMetadata_unpack(pairwiseMISMetadataDST);
-        float accumMDST = metaDST.accumM;
 
         float rcMDivK_DST = canonResDST.m / SETTING_GI_SPATIAL_REUSE_COUNT;
         float MiPiRiY = canonResSRC.m * sampleSRC.sampleValue.w;
@@ -102,13 +101,10 @@ ShiftMapping srcToDst, ShiftMapping dstToSrc
         metaDST.numValidNeighbors += 1u;
 
         float neighborWi = srcToDst.reusableTargetPHat * max(canonResSRC.avgWY, 0.0) * mi_DST;
-        float spatialWSumDST = metaDST.spatialWSum;
         float neighborRand = rand_stbnVec1(rand_newStbnPos(texelDST, RANDOM_FRAME / 64u + 4u + PASS_INDEX), RANDOM_FRAME);
-        if (restir_updateReservoirM(accumMDST, spatialWSumDST, neighborWi, canonResSRC.m, neighborRand)) {
+        if (restir_updateReservoirM(metaDST.accumM, metaDST.spatialWSum, neighborWi, canonResSRC.m, neighborRand)) {
             metaDST.selectedTexel = texelSRC;
         }
-        metaDST.accumM = accumMDST;
-        metaDST.spatialWSum = spatialWSumDST;
         transient_restir_pairwiseMISMetadata_store(texelDST, pairwiseMISMetadata_pack(metaDST));
     }
 }

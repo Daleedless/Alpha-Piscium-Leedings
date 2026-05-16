@@ -290,6 +290,9 @@ void main() {
             }
         }
         PairwiseMISMetadata meta = pairwiseMISMetadata_init(texelPos);
+        if (!restir_isReservoirValid(temporalReservoir)) {
+            temporalReservoir.Y.w = -1.0;
+        }
         meta.accumM = temporalReservoir.m;
         transient_restir_pairwiseMISMetadata_store(texelPos, pairwiseMISMetadata_pack(meta));
         uvec4 packedReservoir = restir_reservoir_pack(temporalReservoir);
