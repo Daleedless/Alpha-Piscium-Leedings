@@ -89,7 +89,7 @@ void main() {
 
                 ShiftMapping winToCenter = evaluateShiftMapping(winRes, centerMaterial, centerSampleData, winSample, viewPos, winViewPos);
                 spatialReservoir.Y = winToCenter.Y;
-                selectedSampleF = vec4(winSample.sampleValue.xyz, winToCenter.targetPHat);
+                selectedSampleF = vec4(winSample.sampleValue.xyz, abs(winToCenter.targetPHat));
             }
 
             float rcAvgWY = max(spatialReservoir.avgWY, 0.0);

@@ -138,23 +138,21 @@ float evalTargetFunction(vec3 irradiance, vec3 normal, vec3 lightDir, vec3 viewD
 struct ShiftMapping {
     vec4 Y;
     float targetPHat;
-    float reusableTargetPHat;
 };
 
 ShiftMapping shiftMapping_init() {
     ShiftMapping mapping;
     mapping.Y = vec4(0.0, 0.0, 0.0, -1.0);
     mapping.targetPHat = 0.0;
-    mapping.reusableTargetPHat = 0.0;
     return mapping;
 }
 
 bool shiftMapping_hasTarget(ShiftMapping mapping) {
-    return mapping.targetPHat > 0.0;
+    return abs(mapping.targetPHat) > 0.0;
 }
 
 bool shiftMapping_isReusable(ShiftMapping mapping) {
-    return mapping.reusableTargetPHat > 0.0;
+    return mapping.targetPHat > 0.0;
 }
 
 
@@ -181,8 +179,8 @@ ShiftMapping evaluateShiftMapping(
                 float jacobian_DST = clamp(((canonResSRC.Y.w * canonResSRC.Y.w) * cosPhiDST) / (dist2 * cosPhiSRC), 0.0, 256.0);
                 mapping.Y = vec4(dirSRCtoDST, sqrt(dist2));
                 mapping.targetPHat = pHat * jacobian_DST;
-                if (cosSRC > 0.0) {
-                    mapping.reusableTargetPHat = mapping.targetPHat;
+                if (cosSRC <= 0.0) {
+                    mapping.targetPHat = -mapping.targetPHat;
                 }
             }
         }

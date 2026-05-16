@@ -68,8 +68,8 @@ vec3 viewPosDST, vec3 viewPosSRC
                     mapping.Y = vec4(dirSRCtoDST, sqrt(dist2));
                     mapping.targetPHat = pHat * jacobian_DST;
                     float cosSRC = dot(sampleSRC.normal, canonResSRC.Y.xyz);
-                    if (cosSRC > 0.0) {
-                        mapping.reusableTargetPHat = mapping.targetPHat;
+                    if (cosSRC <= 0.0) {
+                        mapping.targetPHat = -mapping.targetPHat;
                     }
                 }
             }
@@ -92,7 +92,7 @@ float dstToSrcTargetPHat
 
         float rcMDivK_DST = canonMDST / SETTING_GI_SPATIAL_REUSE_COUNT;
         float MiPiRiY = canonMSRC * sampleSRC.sampleValue.w;
-        float mi_DST = MiPiRiY * safeRcp(MiPiRiY + rcMDivK_DST * srcToDst.reusableTargetPHat);
+        float mi_DST = MiPiRiY * safeRcp(MiPiRiY + rcMDivK_DST * abs(srcToDst.targetPHat));
 
         float mcIncrement_DST = 1.0;
         if (dstToSrcTargetPHat > 0.0) {
@@ -104,7 +104,7 @@ float dstToSrcTargetPHat
         metaDST.mc += mcIncrement_DST;
         metaDST.numValidNeighbors += 1u;
 
-        float neighborWi = srcToDst.reusableTargetPHat * max(canonAvgWYSRC, 0.0) * mi_DST;
+        float neighborWi = abs(srcToDst.targetPHat) * max(canonAvgWYSRC, 0.0) * mi_DST;
         float neighborRand = rand_stbnVec1(rand_newStbnPos(texelDST, RANDOM_FRAME / 64u + 4u + PASS_INDEX), RANDOM_FRAME);
         if (restir_updateReservoirM(metaDST.accumM, metaDST.spatialWSum, neighborWi, canonMSRC, neighborRand)) {
             metaDST.selectedTexel = texelSRC;
@@ -160,7 +160,7 @@ void main() {
                 ReSTIRReservoir canonResMe = restir_reservoir_unpack(repMe);
                 ShiftMapping shiftMeToOther = evaluateShiftMapping(texelOther, canonResMe, normalOther, sampleMe, viewPosOther, viewPosMe);
 
-                float otherToMePHat = subgroupShuffleXor(shiftMeToOther.targetPHat, 1);
+                float otherToMePHat = subgroupShuffleXor(abs(shiftMeToOther.targetPHat), 1);
                 float dstPHat = subgroupShuffleXor(sampleMe.sampleValue.w, 1);
                 float canonMOther = subgroupShuffleXor(canonResMe.m, 1);
                 doResample(texelOther, texelMe, canonMOther, canonResMe.m, canonResMe.avgWY, dstPHat, sampleMe, shiftMeToOther, otherToMePHat);
