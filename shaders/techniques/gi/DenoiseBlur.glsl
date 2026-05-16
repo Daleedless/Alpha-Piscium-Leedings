@@ -47,7 +47,7 @@ GeomData _gi_readGeomData(ivec2 texelPos, vec2 screenPos) {
     geomData.viewPos = coords_toViewCoord(screenPos, viewZ, global_camProjInverse);
     geomData.geomNormal = transient_geomViewNormal_fetch(texelPos).xyz * 2.0 - 1.0;
     geomData.normal = transient_viewNormal_fetch(texelPos).xyz * 2.0 - 1.0;
-    geomData.roughness = pow2(transient_specularPBRData_fetch(texelPos).r);
+    geomData.roughness = max(pow2(transient_specularPBRData_fetch(texelPos).r), 0.001);
     return geomData;
 }
 
