@@ -1,6 +1,7 @@
 #extension GL_KHR_shader_subgroup_ballot : enable
 #extension GL_KHR_shader_subgroup_arithmetic : enable
 #extension GL_KHR_shader_subgroup_shuffle : enable
+#extension GL_KHR_shader_subgroup_clustered : enable
 
 #include "/util/GBufferData.glsl"
 #include "/util/Material.glsl"
@@ -8,7 +9,7 @@
 #include "/util/Mat2.glsl"
 #include "/techniques/gi/Reservoir.glsl"
 
-layout(local_size_x = 256) in;
+layout(local_size_x = 128) in;
 
 layout(rgba32ui) uniform restrict uimage2D uimg_rgba32ui;
 
@@ -82,8 +83,8 @@ void doResample(
 ivec2 texelDST, ivec2 texelSRC,
 float canonMDST, float canonMSRC, float canonAvgWYSRC,
 float dstPHat,
-/*SpatialSampleData sampleDST,*/ SpatialSampleData sampleSRC,
-ShiftMapping srcToDst, /*ShiftMapping dstToSrc*/
+SpatialSampleData sampleSRC,
+ShiftMapping srcToDst,
 float dstToSrcTargetPHat
 ) {
     if (shiftMapping_isReusable(srcToDst)) {
@@ -131,16 +132,20 @@ void main() {
     uint validA = uint(all(lessThan(ivec4(texelA, ivec2(-1)), ivec4(uval_mainImageSizeI, texelA))));
     uint validB = uint(all(lessThan(ivec4(texelB, ivec2(-1)), ivec4(uval_mainImageSizeI, texelB))));
 
-    if (bool(validA & validB & uint(texelA != texelB))){
+    if (bool(validA & validB & uint(texelA != texelB))) {
         bool flagA = bool(gl_GlobalInvocationID.x & 1u);
         ivec2 texelMe = flagA ? texelA : texelB;
-        ivec2 texelOther = flagA ? texelB : texelA;
-        float viewZMe = texelFetch(usam_gbufferSolidViewZ, texelA, 0).x;
-        float viewZOther = subgroupShuffleXor(viewZMe, 1);
-        if (viewZMe > -65536.0 && viewZOther > -65536.0) {
+        float viewZMe = texelFetch(usam_gbufferSolidViewZ, texelMe, 0).x;
+        vec2 screenPosMe = coords_texelToUV(texelMe, uval_mainImageSizeRcp);
+        vec3 viewPosMe = coords_toViewCoord(screenPosMe, viewZMe, global_camProjInverse);
+        uint checkMe = uint(viewZMe > -65536.0);
+        uint viewZCheck = subgroupClusteredAnd(checkMe, 2);
+        if (bool(viewZCheck)) {
             uvec4 spatialSamplePackedDataMe = transient_restir_spatialInput_fetch(texelMe);
             SpatialSampleData sampleMe = spatialSampleData_unpack(spatialSamplePackedDataMe);
-            vec3 geomNormalOther = subgroupShuffleXor(sampleMe.geomNormal, 1);
+            uvec2 packedDataOther = subgroupShuffleXor(spatialSamplePackedDataMe.xy, 1);
+            vec4 xyzw = unpackSnorm4x8(packedDataOther.x);
+            vec3 geomNormalOther = coords_octDecode11(xyzw.xy);
 
             if (dot(sampleMe.geomNormal, geomNormalOther) > 0.99) {
                 uvec4 repMe;
@@ -149,27 +154,17 @@ void main() {
                 } else {
                     repMe = history_restir_reservoirTemporal2_fetch(texelMe);
                 }
-
-                vec2 screenPosMe = coords_texelToUV(texelMe, uval_mainImageSizeRcp);
-                vec3 viewPosMe = coords_toViewCoord(screenPosMe, viewZMe, global_camProjInverse);
                 vec3 viewPosOther = subgroupShuffleXor(viewPosMe, 1);
-
+                vec3 normalOther = nzpacking_unpackNormalOct32(packedDataOther.y);
                 ReSTIRReservoir canonResMe = restir_reservoir_unpack(repMe);
 
-                vec3 normalOther = subgroupShuffleXor(sampleMe.normal, 1);
+                ivec2 texelOther = subgroupShuffleXor(texelMe, 1);
                 ShiftMapping shiftMeToOther = evaluateShiftMapping(texelOther, canonResMe, normalOther, sampleMe, viewPosOther, viewPosMe);
 
-                float canonMOther = subgroupShuffleXor(canonResMe.m, 1);
                 float otherToMePHat = subgroupShuffleXor(shiftMeToOther.targetPHat, 1);
                 float dstPHat = subgroupShuffleXor(sampleMe.sampleValue.w, 1);
-
+                float canonMOther = subgroupShuffleXor(canonResMe.m, 1);
                 doResample(texelOther, texelMe, canonMOther, canonResMe.m, canonResMe.avgWY, dstPHat, sampleMe, shiftMeToOther, otherToMePHat);
-
-//                ShiftMapping shiftBtoA = evaluateShiftMapping(texelA, canonResB, sampleA, sampleB, viewPosA, viewPosB);
-//                ShiftMapping shiftAtoB = evaluateShiftMapping(texelB, canonResA, sampleB, sampleA, viewPosB, viewPosA);
-//
-//                doResample(texelA, texelB, canonResA, canonResB, sampleA, sampleB, shiftBtoA, shiftAtoB);
-//                doResample(texelB, texelA, canonResB, canonResA, sampleB, sampleA, shiftAtoB, shiftBtoA);
             }
         }
     }
