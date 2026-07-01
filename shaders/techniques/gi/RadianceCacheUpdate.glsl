@@ -33,6 +33,55 @@ struct RCCandidate {
     bool valid;
 };
 
+const float RC_CV_ALPHA = 1.0;
+const float RC_CV_M_CAP = 20.0;
+
+struct RCCVAccumulator {
+    vec3 estimateSum;
+    float weightSum;
+    bool invalid;
+};
+
+RCCVAccumulator rc_cvAccumulatorInit() {
+    RCCVAccumulator accumulator;
+    accumulator.estimateSum = vec3(0.0);
+    accumulator.weightSum = 0.0;
+    accumulator.invalid = false;
+    return accumulator;
+}
+
+vec3 rc_cvSampleContribution(RCReservoir reservoir) {
+    return reservoir.radiance * reservoir.avgWY;
+}
+
+vec3 rc_cvInitialEstimate(RCCandidate candidate) {
+    return candidate.valid ? candidate.radiance : vec3(0.0);
+}
+
+void rc_cvAccumulatorAdd(inout RCCVAccumulator accumulator, vec3 estimate, float weight) {
+    if (weight <= 0.0) {
+        return;
+    }
+    if (isnan(weight) || any(isnan(estimate))) {
+        accumulator.invalid = true;
+        return;
+    }
+
+    accumulator.estimateSum += estimate * weight;
+    accumulator.weightSum += weight;
+}
+
+bool rc_cvAccumulatorValid(RCCVAccumulator accumulator) {
+    return !accumulator.invalid
+        && accumulator.weightSum > 0.0
+        && !isnan(accumulator.weightSum)
+        && !any(isnan(accumulator.estimateSum));
+}
+
+vec3 rc_cvAccumulatorResolve(RCCVAccumulator accumulator) {
+    return accumulator.estimateSum * safeRcp(accumulator.weightSum);
+}
+
 uint rc_feedbackRecordIndex(uint side, uint entryIndex) {
     return rc_bufferEntryIndex(side, entryIndex);
 }
@@ -410,7 +459,8 @@ bool rc_generateSpatialCandidate(
     float targetM,
     float sourceM,
     out RCCandidate candidate,
-    out float spatialMInc
+    out float spatialMInc,
+    out float misWeight
 ) {
     candidate.radiance = vec3(0.0);
     candidate.dir = rc_faceNormal(faceId);
@@ -420,6 +470,7 @@ bool rc_generateSpatialCandidate(
     candidate.flags = 0u;
     candidate.valid = false;
     spatialMInc = 0.0;
+    misWeight = 0.0;
 
     #ifndef SETTING_RC_SPATIAL_ENABLE
         return false;
@@ -482,7 +533,7 @@ bool rc_generateSpatialCandidate(
             return false;
         }
 
-        float misWeight = rc_pairwiseSpatialMIS_MAware(
+        misWeight = rc_pairwiseSpatialMIS_MAware(
             targetOrigin,
             targetNormal,
             neighborOrigin,
@@ -517,6 +568,7 @@ RCReservoir rc_reservoirInitFromCandidate(RCCandidate candidate) {
         reservoir.m = 1.0;
         reservoir.hitPos = candidate.hitPos;
         reservoir.meta = rc_packReservoirMeta(0u, true, candidate.flags);
+        reservoir.estimate = candidate.radiance;
     } else {
         reservoir = rc_reservoirInit();
     }
@@ -540,6 +592,9 @@ void rc_updateFace(uint entryIndex, uvec4 entry, ivec3 worldCellCoord, uint leve
 
     RCCandidate candidate = rc_generateCandidate(entryIndex, worldCellCoord, level, faceId, allowHitFeedback);
     RCReservoir reservoir = rc_reservoirInit();
+    RCCVAccumulator cvAccumulator = rc_cvAccumulatorInit();
+    float qInit = candidate.valid ? 1.0 : 0.0;
+    rc_cvAccumulatorAdd(cvAccumulator, rc_cvInitialEstimate(candidate), qInit);
 
     uint prevBufferIndex = rc_bufferEntryIndex(rc_previousSide(), entryIndex);
     uvec4 prevEntry = rc_indirection[prevBufferIndex];
@@ -569,7 +624,9 @@ void rc_updateFace(uint entryIndex, uvec4 entry, ivec3 worldCellCoord, uint leve
         }
     }
     float wSum = 0.0;
+    RCReservoir historyBeforeRevalidate = reservoir;
     if (historyValid) {
+        historyBeforeRevalidate = reservoir;
         wSum = reservoir.avgWY * rc_luminance(reservoir.radiance);
         uint validateId = gl_WorkGroupID.x + (gl_WorkGroupID.x >> 3);
         if ((validateId & 7u) == (uint(frameCounter) & 7u)) {
@@ -583,6 +640,14 @@ void rc_updateFace(uint entryIndex, uvec4 entry, ivec3 worldCellCoord, uint leve
                 reservoir = rc_reservoirInit();
             }
         }
+    }
+    if (historyValid) {
+        float historyM = reservoir.m;
+        float qHistory = historyValid ? min(historyM, RC_CV_M_CAP) : 0.0;
+        vec3 oldHistorySample = rc_cvSampleContribution(historyBeforeRevalidate);
+        vec3 currentHistorySample = rc_cvSampleContribution(reservoir);
+        vec3 fromHistory = historyBeforeRevalidate.estimate + (currentHistorySample - RC_CV_ALPHA * oldHistorySample);
+        rc_cvAccumulatorAdd(cvAccumulator, fromHistory, qHistory);
     }
 
     uint selectedFlags = historyValid ? rc_reservoirMetaFlags(reservoir.meta) : 0u;
@@ -625,6 +690,7 @@ void rc_updateFace(uint entryIndex, uvec4 entry, ivec3 worldCellCoord, uint leve
         );
         RCCandidate spatialCandidate;
         float spatialMInc;
+        float misWeight;
         float sourceM = rc_spatialEffectiveSourceM(neighborReservoir);
         float targetM = clamp(max(reservoir.m, 1.0), 1.0, float(SETTING_RC_M_CAP));
         if (spatialNeighborValid && sourceM > 0.0 && SETTING_RC_SPATIAL_STRENGTH > 0.0 && rc_generateSpatialCandidate(
@@ -637,11 +703,18 @@ void rc_updateFace(uint entryIndex, uvec4 entry, ivec3 worldCellCoord, uint leve
             targetM,
             sourceM,
             spatialCandidate,
-            spatialMInc
+            spatialMInc,
+            misWeight
         )) {
             float randSpatial = hash_uintToFloat(hash_41_q5(uvec4(entryIndex, faceId, frameCounter, 0x27D4EB2Du)));
             float sourceCorrection = rc_spatialSourceCorrection(neighborReservoir);
             float spatialStrength = SETTING_RC_SPATIAL_STRENGTH;
+            float qSpatial = min(sourceM, RC_CV_M_CAP) * SETTING_RC_SPATIAL_STRENGTH;
+            vec3 spatialDelta = misWeight * sourceCorrection * neighborReservoir.avgWY * (spatialCandidate.radiance - RC_CV_ALPHA * neighborReservoir.radiance);
+            vec3 fromSpatial = neighborReservoir.estimate + spatialDelta;
+            if (sourceCorrection > 0.0) {
+                rc_cvAccumulatorAdd(cvAccumulator, fromSpatial, qSpatial);
+            }
             float spatialUpdateWeight =
                 spatialCandidate.targetWeight *
                 sourceCorrection *
@@ -689,8 +762,13 @@ void rc_updateFace(uint entryIndex, uvec4 entry, ivec3 worldCellCoord, uint leve
     reservoir.avgWY = reservoirValid ? wSum * safeRcp(reservoir.m) * safeRcp(selectedTargetWeight) : 0.0;
     reservoir.meta = rc_packReservoirMeta(selectedAge, reservoirValid, selectedFlags);
 
-    if (spatialNeighborValid) {
-        reservoir.meta |= 1u;
+    if (reservoirValid && rc_cvAccumulatorValid(cvAccumulator)) {
+        reservoir.estimate = rc_cvAccumulatorResolve(cvAccumulator);
+        if (spatialNeighborValid) {
+            reservoir.meta |= 1u;
+        }
+    } else {
+        reservoir = rc_reservoirInit();
     }
 
     rc_reservoirStore(rc_currentSide(), reservoirIndex, reservoir);
